@@ -10,23 +10,56 @@ import CoreData
 struct MessageComposerView: View {
     @ObservedObject var viewModel: ViewModel
     @FocusState var promptTextFieldIsActive: Bool
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack {
-            TextField("Enter your prompt", text: $viewModel.input, axis: .vertical)
-                .textFieldStyle(.automatic)
-                .padding(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 10))
-                .foregroundColor(.primary)
-                .lineLimit(5)
-                .multilineTextAlignment(.leading)
-                .submitLabel(.done)
-                .onSubmit(submitButtonTapped)
-                .focused($promptTextFieldIsActive)
-            Button(action: submitButtonTapped) {
-                Text("Submit")
-                    .foregroundColor(viewModel.isMessageSending ? .red : .accentColor)
-                    .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 20))
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 12) {
+                // Input field
+                TextField("Enter your prompt", text: $viewModel.input, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 0))
+                    .foregroundColor(.primary)
+                    .lineLimit(5)
+                    .multilineTextAlignment(.leading)
+                    .submitLabel(.send)
+                    .onSubmit(submitButtonTapped)
+                    .focused($promptTextFieldIsActive)
+                    .disabled(viewModel.isMessageSending)
+
+                // Send button or loading indicator
+                if viewModel.isMessageSending {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .frame(width: 24, height: 24)
+                        .padding(.trailing, 12)
+                        .transition(.opacity)
+                } else {
+                    Button(action: submitButtonTapped) {
+                        Image(systemName: viewModel.showAlert ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(
+                                viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? .gray.opacity(0.5)
+                                : viewModel.showAlert ? .orange : .accentColor
+                            )
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .padding(.trailing, 12)
+                    .transition(.opacity)
+                }
             }
+            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
+            .background(
+                colorScheme == .dark
+                ? Color.black.opacity(0.3)
+                : Color.white.opacity(0.9)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
         }
         .alert(viewModel.alertInfo?.title ?? "///Missing title///", isPresented: $viewModel.showAlert, actions: {
             if let alertInfo = $viewModel.alertInfo.wrappedValue, let tf = alertInfo.textField, let bt = alertInfo.button {
@@ -43,7 +76,7 @@ struct MessageComposerView: View {
     }
 
     func submitButtonTapped() {
-        if viewModel.isMessageSending { return }
+        if viewModel.isMessageSending || viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
 
         Task {
             await viewModel.sendMessage()
@@ -61,7 +94,7 @@ extension MessageComposerView {
         @Published var showError: Bool = false
         @Published var isMessageSending: Bool = false
 
-        private var messageService: any ChatMessageService
+        nonisolated private let messageService: any ChatMessageService
 
         init(messageService: any ChatMessageService) {
             self.messageService = messageService
@@ -74,7 +107,7 @@ extension MessageComposerView {
             let sentText = input
             // Clear the input field
             Task { @MainActor in input = "" }
-            do { try await messageService.performChatCompletionRequest(message: sentText, stream: true) }
+            do { try await messageService.send(message: sentText, stream: true) }
             catch {
                 handleError(error)
                 Task { @MainActor in input = sentText }
