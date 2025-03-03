@@ -16,19 +16,7 @@ struct MessageComposerView: View {
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: 12) {
-                // Input field
-                TextField("Enter your prompt", text: $viewModel.input, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 0))
-                    .foregroundColor(.primary)
-                    .lineLimit(5)
-                    .multilineTextAlignment(.leading)
-                    .submitLabel(.send)
-                    .onSubmit(submitButtonTapped)
-                    .focused($promptTextFieldIsActive)
-                    .disabled(viewModel.isMessageSending)
-
-                // Send button or loading indicator
+                textInputField
                 if viewModel.isMessageSending {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
@@ -36,19 +24,7 @@ struct MessageComposerView: View {
                         .padding(.trailing, 12)
                         .transition(.opacity)
                 } else {
-                    Button(action: submitButtonTapped) {
-                        Image(systemName: viewModel.showAlert ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(
-                                viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? .gray.opacity(0.5)
-                                : viewModel.showAlert ? .orange : .accentColor
-                            )
-                    }
-                    .buttonStyle(BorderlessButtonStyle())
-                    .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .padding(.trailing, 12)
-                    .transition(.opacity)
+                    sendButton
                 }
             }
             .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
@@ -73,6 +49,48 @@ struct MessageComposerView: View {
         .alert(isPresented: $viewModel.showError, content: {
             Alert(title: Text("Error"), message: Text($viewModel.alertInfo.wrappedValue?.title ?? ""), dismissButton: .default(Text("OK")))
         })
+    }
+
+    var textInputField: some View {
+        TextField("Enter your prompt", text: $viewModel.input, axis: .vertical)
+            .textFieldStyle(.plain)
+            .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 0))
+            .foregroundColor(.primary)
+            .lineLimit(5)
+            .multilineTextAlignment(.leading)
+            .onKeyPress(keys: .init([.return]), action: handleEnterPress)
+            .focused($promptTextFieldIsActive)
+            .disabled(viewModel.isMessageSending)
+    }
+
+    var sendButton: some View {
+        Button(action: submitButtonTapped) {
+            Image(systemName: viewModel.showAlert ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill")
+                .font(.system(size: 24))
+                .foregroundColor(
+                    viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? .gray.opacity(0.5)
+                    : viewModel.showAlert ? .orange : .accentColor
+                )
+        }
+        .buttonStyle(BorderlessButtonStyle())
+        .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .padding(.trailing, 12)
+        .transition(.opacity)
+    }
+
+    private func handleEnterPress(with press: KeyPress) -> KeyPress.Result {
+        if press.modifiers.contains(.shift) {
+            // Insert a new line when Shift+Enter is pressed
+            Task { @MainActor in
+                viewModel.input += "\n"
+            }
+            return .handled
+        } else {
+            // Submit only when Enter is pressed without Shift
+            submitButtonTapped()
+            return .handled
+        }
     }
 
     func submitButtonTapped() {
