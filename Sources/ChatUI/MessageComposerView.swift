@@ -5,7 +5,6 @@
 //
 
 import SwiftUI
-import CoreData
 
 struct MessageComposerView: View {
     @ObservedObject var viewModel: ViewModel
@@ -20,27 +19,30 @@ struct MessageComposerView: View {
                 if viewModel.isMessageSending {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
-                        .frame(width: 24, height: 24)
-                        .padding(.trailing, 12)
+                        .padding(.trailing, 4)
                         .transition(.opacity)
                 } else {
                     sendButton
+                        .padding(.trailing, 4)
+                        .transition(.opacity)
                 }
             }
-            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 0))
-            .background(
-                colorScheme == .dark
-                ? Color.black.opacity(0.3)
-                : Color.white.opacity(0.9)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .padding(8)
+            .background(inputBackgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 30))
             .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 30)
+                    .stroke(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3), lineWidth: 1)
+            }
+            .padding(8)
         }
         .alert(viewModel.alertInfo?.title ?? "///Missing title///", isPresented: $viewModel.showAlert, actions: {
             if let alertInfo = $viewModel.alertInfo.wrappedValue, let tf = alertInfo.textField, let bt = alertInfo.button {
                 TextField(tf.label, text: tf.text)
-                Button(bt.text, role: bt.role, action: { do { try bt.action(alertInfo) } catch { viewModel.handleError(error) } })
+                Button(bt.text, role: bt.role, action: {
+                    do { try bt.action(alertInfo) } catch { viewModel.handleError(error) }
+                })
             }
             Button("Cancel", role: .cancel, action: {})
         }, message: {
@@ -75,8 +77,18 @@ struct MessageComposerView: View {
         }
         .buttonStyle(BorderlessButtonStyle())
         .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .padding(.trailing, 12)
-        .transition(.opacity)
+    }
+
+    private var inputBackgroundColor: Color {
+#if os(iOS)
+        return colorScheme == .dark
+        ? Color.black.opacity(0.3)
+        : Color.white.opacity(0.9)
+#else
+        return colorScheme == .dark
+        ? Color.black.opacity(0.3)
+        : Color.black.opacity(0.15)
+#endif
     }
 
     private func handleEnterPress(with press: KeyPress) -> KeyPress.Result {
@@ -140,6 +152,86 @@ extension MessageComposerView {
             } else {
                 self.alertInfo = ChatAlertInfo(title: "Error!", textField: nil , button: nil, message: "Error sending message completion request: \(error)")
                 self.showError = true
+            }
+        }
+    }
+}
+
+// Progress bar for sending message
+public struct CircularProgressViewStyle: ProgressViewStyle {
+    let size: CGFloat = 24.0
+    private let lineWidth: CGFloat = 6.0
+
+    // Make these StateObjects to ensure they're properly tracked across view updates
+    @StateObject private var animator = ProgressAnimator()
+
+    public func makeBody(configuration: ProgressViewStyleConfiguration) -> some View {
+        ZStack {
+            configuration.label
+            progressCircleView()
+            configuration.currentValueLabel
+        }.padding(.trailing, lineWidth)
+    }
+
+    private func progressCircleView() -> some View {
+        Circle()
+            .stroke(.gray, lineWidth: lineWidth)
+            .opacity(0.2)
+            .overlay(progressFill())
+            .frame(width: size - lineWidth, height: size - lineWidth)
+            .onAppear { animator.startAnimation() }
+            .onDisappear { animator.stopAnimation() }
+    }
+
+    private func progressFill() -> some View {
+        Circle()
+            .trim(from: 0, to: CGFloat(animator.progress))
+            .stroke(.gray, lineWidth: lineWidth)
+            .opacity(0.6)
+            .frame(width: size - lineWidth, height: size - lineWidth)
+            .rotationEffect(.degrees(-90))
+    }
+}
+
+// Separate class to manage animation state
+@MainActor class ProgressAnimator: ObservableObject {
+    @Published var progress: Double = 0.0
+    private var isAnimating: Bool = false
+    private var fillDuration: Double = 2.0
+    private var emptyDuration: Double = 1.0
+
+    func startAnimation(fillDuration: Double = 2.0, emptyDuration: Double = 1.0) {
+        self.fillDuration = fillDuration
+        self.emptyDuration = emptyDuration
+        isAnimating = true
+        animate()
+    }
+
+    func stopAnimation() {
+        isAnimating = false
+    }
+
+    private func animate() {
+        guard isAnimating else { return }
+
+        // Animate to full
+        withAnimation(.easeInOut(duration: fillDuration)) {
+            progress = 1.0
+        }
+
+        // Schedule the emptying animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + fillDuration) { [emptyDuration] in
+
+            // Animate back to empty
+            withAnimation(.easeInOut(duration: emptyDuration)) {
+                self.progress = 0.0
+            }
+
+            // Schedule the next fill cycle
+            DispatchQueue.main.asyncAfter(deadline: .now() + emptyDuration) {
+                Task { @MainActor in
+                    self.animate()
+                }
             }
         }
     }

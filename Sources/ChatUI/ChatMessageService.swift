@@ -13,6 +13,7 @@ public protocol ChatMessageInfo: Sendable, ObservableObject, Identifiable, Hasha
     var uuid: UUID { get }
     var text: String? { get }
 
+    var parentMessage: Self? { get }
     var childChatMessages: [Self] { get }
 
     var isUser: Bool { get }
