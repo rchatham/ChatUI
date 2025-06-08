@@ -8,11 +8,11 @@ import SwiftUI
 import CoreData
 import Combine
 
-public struct ChatView<MessageService: ChatMessageService, SettingsView: View>: View {
+public struct ChatView<MessageService: ChatMessageService, SettingsView: View, MessageComposerAccessoryView: View>: View {
     @ObservedObject var viewModel: ViewModel
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?) {
-        viewModel = ViewModel(title: title, messageService: messageService, settingsView: settingsView)
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?, messageComposerAccessoryView: (() -> [MessageComposerAccessoryView])? = nil) {
+        viewModel = ViewModel(title: title, messageService: messageService, settingsView: settingsView, messageComposerAccessoryView: messageComposerAccessoryView)
     }
 
     public init(viewModel: ViewModel) {
@@ -65,11 +65,13 @@ extension ChatView {
         @Published var showAlert = false
         private let messageService: MessageService
         private var _settingView: (() -> SettingsView)?
+        private var _accessoryViews: (() -> [MessageComposerAccessoryView])?
 
-        public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?) {
+        public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?, messageComposerAccessoryView: (() -> [MessageComposerAccessoryView])? = nil) {
             self.title = title
             self.messageService = messageService
             _settingView = settingsView
+            _accessoryViews = messageComposerAccessoryView
         }
 
         func delete(id: UUID) {
@@ -81,11 +83,11 @@ extension ChatView {
         }
         
         func messageComposerViewModel() -> MessageComposerView.ViewModel {
-            return MessageComposerView.ViewModel(messageService: messageService)
+            return .init(messageService: messageService)
         }
 
         func messageListViewModel() -> MessageListView<MessageService>.ViewModel {
-            return MessageListView.ViewModel(messageService: messageService)
+            return .init(messageService: messageService)
         }
     }
 }
