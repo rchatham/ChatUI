@@ -20,12 +20,10 @@ public struct ChatView<MessageService: ChatMessageService, SettingsView: View>: 
     }
 
     public var body: some View {
-        NavigationStack {
-            if let title = viewModel.title {
-                chatView.navigationTitle(title)
-            } else {
-                chatView
-            }
+        if let title = viewModel.title {
+            chatView.navigationTitle(title)
+        } else {
+            chatView
         }
     }
 
@@ -36,11 +34,13 @@ public struct ChatView<MessageService: ChatMessageService, SettingsView: View>: 
                 .invalidInputAlert(isPresented: $viewModel.showAlert)
         }
         .toolbar {
-            #if DEBUG
-            NavigationLink(destination: viewModel.settingsView()) {
-                Image(systemName: "gear")
+//            #if DEBUG
+            if let settingsView = viewModel.settingsView() {
+                NavigationLink(destination: settingsView) {
+                    Image(systemName: "gear")
+                }
             }
-            #endif
+//            #endif
         }
         #if os(iOS)
         .dismissKeyboardOnSwipe()
