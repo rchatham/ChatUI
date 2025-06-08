@@ -150,7 +150,7 @@ extension MessageComposerView {
                 self.alertInfo = alertInfo
                 self.showAlert = true
             } else {
-                self.alertInfo = ChatAlertInfo(title: "Error!", textField: nil , button: nil, message: "Error sending message completion request: \(error)")
+                self.alertInfo = ChatAlertInfo(title: "Error!", textField: nil , button: nil, message: "Error sending message completion request: \(error.localizedDescription)")
                 self.showError = true
             }
         }
