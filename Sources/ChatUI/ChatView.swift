@@ -8,11 +8,13 @@ import SwiftUI
 import CoreData
 import Combine
 
-public struct ChatView<MessageService: ChatMessageService, SettingsView: View>: View {
+public struct ChatView<MessageService: ChatMessageService>: View {
     @ObservedObject var viewModel: ViewModel
+    private var _settingsView: (() -> AnyView)?
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?) {
-        viewModel = ViewModel(title: title, messageService: messageService, settingsView: settingsView)
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil) {
+        viewModel = ViewModel(title: title, messageService: messageService)
+        _settingsView = settingsView
     }
 
     public init(viewModel: ViewModel) {
@@ -34,13 +36,11 @@ public struct ChatView<MessageService: ChatMessageService, SettingsView: View>: 
                 .invalidInputAlert(isPresented: $viewModel.showAlert)
         }
         .toolbar {
-//            #if DEBUG
-            if let settingsView = viewModel.settingsView() {
+            if let settingsView = _settingsView?() {
                 NavigationLink(destination: settingsView) {
                     Image(systemName: "gear")
                 }
             }
-//            #endif
         }
         #if os(iOS)
         .dismissKeyboardOnSwipe()
@@ -64,20 +64,14 @@ extension ChatView {
         @Published var input = ""
         @Published var showAlert = false
         private let messageService: MessageService
-        private var _settingView: (() -> SettingsView)?
 
-        public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?) {
+        public init(title: String? = nil, messageService: MessageService) {
             self.title = title
             self.messageService = messageService
-            _settingView = settingsView
         }
 
         func delete(id: UUID) {
             messageService.deleteMessage(id: id)
-        }
-
-        func settingsView() -> (some View)? {
-            return _settingView?()
         }
         
         func messageComposerViewModel() -> MessageComposerView.ViewModel {
