@@ -11,14 +11,28 @@ import Combine
 public struct ChatView<MessageService: ChatMessageService>: View {
     @ObservedObject var viewModel: ViewModel
     private var _settingsView: (() -> AnyView)?
+    private var _messageContent: ((MessageService.ChatMessage) -> AnyView)?
 
     public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil) {
         viewModel = ViewModel(title: title, messageService: messageService)
         _settingsView = settingsView
+        _messageContent = nil
+    }
+
+    public init(
+        title: String? = nil,
+        messageService: MessageService,
+        settingsView: (() -> AnyView)? = nil,
+        @ViewBuilder messageContent: @escaping (MessageService.ChatMessage) -> some View
+    ) {
+        viewModel = ViewModel(title: title, messageService: messageService)
+        _settingsView = settingsView
+        _messageContent = { message in AnyView(messageContent(message)) }
     }
 
     public init(viewModel: ViewModel) {
         self.viewModel = viewModel
+        _messageContent = nil
     }
 
     public var body: some View {
@@ -49,7 +63,7 @@ public struct ChatView<MessageService: ChatMessageService>: View {
 
     @ViewBuilder
     var messageList: some View {
-        MessageListView(viewModel: viewModel.messageListViewModel())
+        MessageListView(viewModel: viewModel.messageListViewModel(), messageContent: _messageContent)
     }
 
     @ViewBuilder
