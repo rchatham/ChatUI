@@ -12,27 +12,32 @@ public struct ChatView<MessageService: ChatMessageService>: View {
     @ObservedObject var viewModel: ViewModel
     private var _settingsView: (() -> AnyView)?
     private var _messageContent: ((MessageService.ChatMessage) -> AnyView)?
+    private var voiceInputHandler: VoiceInputHandler?
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil) {
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: VoiceInputHandler? = nil) {
         viewModel = ViewModel(title: title, messageService: messageService)
         _settingsView = settingsView
         _messageContent = nil
+        self.voiceInputHandler = voiceInputHandler
     }
 
     public init(
         title: String? = nil,
         messageService: MessageService,
         settingsView: (() -> AnyView)? = nil,
+        voiceInputHandler: VoiceInputHandler? = nil,
         @ViewBuilder messageContent: @escaping (MessageService.ChatMessage) -> some View
     ) {
         viewModel = ViewModel(title: title, messageService: messageService)
         _settingsView = settingsView
         _messageContent = { message in AnyView(messageContent(message)) }
+        self.voiceInputHandler = voiceInputHandler
     }
 
-    public init(viewModel: ViewModel) {
+    public init(viewModel: ViewModel, voiceInputHandler: VoiceInputHandler? = nil) {
         self.viewModel = viewModel
         _messageContent = nil
+        self.voiceInputHandler = voiceInputHandler
     }
 
     public var body: some View {
@@ -68,7 +73,7 @@ public struct ChatView<MessageService: ChatMessageService>: View {
 
     @ViewBuilder
     var messageComposerView: some View {
-        MessageComposerView(viewModel: viewModel.messageComposerViewModel())
+        MessageComposerView(viewModel: viewModel.messageComposerViewModel(voiceInputHandler: voiceInputHandler))
     }
 }
 
@@ -87,9 +92,9 @@ extension ChatView {
         func delete(id: UUID) {
             messageService.deleteMessage(id: id)
         }
-        
-        func messageComposerViewModel() -> MessageComposerView.ViewModel {
-            return MessageComposerView.ViewModel(messageService: messageService)
+
+        func messageComposerViewModel(voiceInputHandler: VoiceInputHandler? = nil) -> MessageComposerView.ViewModel {
+            return MessageComposerView.ViewModel(messageService: messageService, voiceInputHandler: voiceInputHandler)
         }
 
         func messageListViewModel() -> MessageListView<MessageService>.ViewModel {

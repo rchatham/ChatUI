@@ -6,17 +6,41 @@
 
 import SwiftUI
 
+/// Protocol for voice input capability injection
+@MainActor
+public protocol VoiceInputHandler: AnyObject {
+    var isRecording: Bool { get }
+    var isProcessing: Bool { get }
+    var audioLevel: Float { get }
+    var isEnabled: Bool { get }
+
+    func toggleRecording() async
+    func getTranscribedText() -> String?
+}
+
 struct MessageComposerView: View {
     @ObservedObject var viewModel: ViewModel
     @FocusState var promptTextFieldIsActive: Bool
     @Environment(\.colorScheme) var colorScheme
 
+    // Voice input state
+    @State private var isRecording = false
+    @State private var isProcessingVoice = false
+    @State private var audioLevel: Float = 0.0
+
     var body: some View {
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: 12) {
+                // Microphone button (if voice input is enabled)
+                if let voiceHandler = viewModel.voiceInputHandler, voiceHandler.isEnabled {
+                    microphoneButton(handler: voiceHandler)
+                        .padding(.leading, 4)
+                }
+
                 textInputField
-                if viewModel.isMessageSending {
+
+                if viewModel.isMessageSending || isProcessingVoice {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                         .padding(.trailing, 4)
@@ -33,7 +57,7 @@ struct MessageComposerView: View {
             .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
             .overlay {
                 RoundedRectangle(cornerRadius: 30)
-                    .stroke(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3), lineWidth: 1)
+                    .stroke(isRecording ? Color.red.opacity(0.8) : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3)), lineWidth: isRecording ? 2 : 1)
             }
             .padding(8)
         }
@@ -77,6 +101,66 @@ struct MessageComposerView: View {
         }
         .buttonStyle(BorderlessButtonStyle())
         .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func microphoneButton(handler: VoiceInputHandler) -> some View {
+        Button(action: {
+            Task {
+                await toggleVoiceRecording(handler: handler)
+            }
+        }) {
+            ZStack {
+                // Background pulse animation when recording
+                if isRecording {
+                    Circle()
+                        .fill(Color.red.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .scaleEffect(1.0 + CGFloat(audioLevel) * 0.5)
+                        .animation(.easeInOut(duration: 0.1), value: audioLevel)
+                }
+
+                Image(systemName: isRecording ? "mic.fill" : "mic")
+                    .font(.system(size: 20))
+                    .foregroundColor(isRecording ? .red : .gray)
+            }
+            .frame(width: 32, height: 32)
+        }
+        .buttonStyle(BorderlessButtonStyle())
+        .disabled(isProcessingVoice || viewModel.isMessageSending)
+    }
+
+    private func toggleVoiceRecording(handler: VoiceInputHandler) async {
+        if isRecording {
+            // Stop recording
+            isRecording = false
+            isProcessingVoice = true
+
+            await handler.toggleRecording()
+
+            // Get transcribed text and append to input
+            if let text = handler.getTranscribedText(), !text.isEmpty {
+                if viewModel.input.isEmpty {
+                    viewModel.input = text
+                } else {
+                    viewModel.input += " " + text
+                }
+            }
+
+            isProcessingVoice = false
+            promptTextFieldIsActive = true
+        } else {
+            // Start recording
+            isRecording = true
+            await handler.toggleRecording()
+
+            // Update audio level periodically while recording
+            Task {
+                while isRecording {
+                    audioLevel = handler.audioLevel
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                }
+            }
+        }
     }
 
     private var inputBackgroundColor: Color {
@@ -125,9 +209,11 @@ extension MessageComposerView {
         @Published var isMessageSending: Bool = false
 
         nonisolated private let messageService: any ChatMessageService
+        let voiceInputHandler: VoiceInputHandler?
 
-        init(messageService: any ChatMessageService) {
+        init(messageService: any ChatMessageService, voiceInputHandler: VoiceInputHandler? = nil) {
             self.messageService = messageService
+            self.voiceInputHandler = voiceInputHandler
         }
 
         func sendMessage() async {
