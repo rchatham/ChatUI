@@ -13,6 +13,7 @@ public protocol VoiceInputHandler: AnyObject {
     var isProcessing: Bool { get }
     var audioLevel: Float { get }
     var isEnabled: Bool { get }
+    var replaceSendButton: Bool { get }
 
     func toggleRecording() async
     func getTranscribedText() -> String?
@@ -32,8 +33,10 @@ struct MessageComposerView: View {
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: 12) {
-                // Microphone button (if voice input is enabled)
-                if let voiceHandler = viewModel.voiceInputHandler, voiceHandler.isEnabled {
+                // Microphone button on left (only when NOT replacing send button)
+                if let voiceHandler = viewModel.voiceInputHandler,
+                   voiceHandler.isEnabled,
+                   !voiceHandler.replaceSendButton {
                     microphoneButton(handler: voiceHandler)
                         .padding(.leading, 4)
                 }
@@ -43,6 +46,14 @@ struct MessageComposerView: View {
                 if viewModel.isMessageSending || isProcessingVoice {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
+                        .padding(.trailing, 4)
+                        .transition(.opacity)
+                } else if let voiceHandler = viewModel.voiceInputHandler,
+                          voiceHandler.isEnabled,
+                          voiceHandler.replaceSendButton,
+                          viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Show microphone in send button position when input is empty
+                    microphoneButton(handler: voiceHandler)
                         .padding(.trailing, 4)
                         .transition(.opacity)
                 } else {
