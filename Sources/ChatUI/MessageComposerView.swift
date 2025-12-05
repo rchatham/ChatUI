@@ -12,6 +12,7 @@ public protocol VoiceInputHandler: AnyObject {
     var isRecording: Bool { get }
     var isProcessing: Bool { get }
     var audioLevel: Float { get }
+    var statusDescription: String { get }
     var isEnabled: Bool { get }
     var replaceSendButton: Bool { get }
 
@@ -28,11 +29,20 @@ struct MessageComposerView: View {
     @State private var isRecording = false
     @State private var isProcessingVoice = false
     @State private var audioLevel: Float = 0.0
+    @State private var statusText: String = ""
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(spacing: 12) {
+        ZStack(alignment: .bottom) {
+            // Status popup overlay
+            if isRecording || isProcessingVoice {
+                voiceStatusPopup
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1)
+            }
+
+            VStack(spacing: 0) {
+                Divider()
+                HStack(spacing: 12) {
                 // Microphone button on left (only when NOT replacing send button)
                 if let voiceHandler = viewModel.voiceInputHandler,
                    voiceHandler.isEnabled,
@@ -71,7 +81,10 @@ struct MessageComposerView: View {
                     .stroke(isRecording ? Color.red.opacity(0.8) : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3)), lineWidth: isRecording ? 2 : 1)
             }
             .padding(8)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: isRecording)
+        .animation(.easeInOut(duration: 0.2), value: isProcessingVoice)
         .alert(viewModel.alertInfo?.title ?? "///Missing title///", isPresented: $viewModel.showAlert, actions: {
             if let alertInfo = $viewModel.alertInfo.wrappedValue, let tf = alertInfo.textField, let bt = alertInfo.button {
                 TextField(tf.label, text: tf.text)
@@ -145,8 +158,12 @@ struct MessageComposerView: View {
             // Stop recording
             isRecording = false
             isProcessingVoice = true
+            statusText = "Processing..."
 
             await handler.toggleRecording()
+
+            // Update status during processing
+            statusText = handler.statusDescription
 
             // Get transcribed text and append to input
             if let text = handler.getTranscribedText(), !text.isEmpty {
@@ -158,16 +175,19 @@ struct MessageComposerView: View {
             }
 
             isProcessingVoice = false
+            statusText = ""
             promptTextFieldIsActive = true
         } else {
             // Start recording
             isRecording = true
+            statusText = "Recording..."
             await handler.toggleRecording()
 
-            // Update audio level periodically while recording
+            // Update audio level and status periodically while recording
             Task {
                 while isRecording {
                     audioLevel = handler.audioLevel
+                    statusText = handler.statusDescription
                     try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
                 }
             }
@@ -184,6 +204,81 @@ struct MessageComposerView: View {
         ? Color.black.opacity(0.3)
         : Color.black.opacity(0.15)
 #endif
+    }
+
+    private var popupBackgroundColor: Color {
+        colorScheme == .dark
+        ? Color.gray.opacity(0.3)
+        : Color.gray.opacity(0.15)
+    }
+
+    private var voiceStatusPopup: some View {
+        HStack(spacing: 12) {
+            // Animated indicator
+            if isRecording {
+                // Recording waveform animation
+                HStack(spacing: 3) {
+                    ForEach(0..<5, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.red)
+                            .frame(width: 4, height: waveformHeight(for: index))
+                            .animation(
+                                .easeInOut(duration: 0.3)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.1),
+                                value: audioLevel
+                            )
+                    }
+                }
+                .frame(width: 32, height: 20)
+            } else if isProcessingVoice {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            Text(statusText)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+
+            Spacer()
+
+            // Cancel button when recording
+            if isRecording {
+                Button(action: {
+                    Task {
+                        if let handler = viewModel.voiceInputHandler {
+                            isRecording = false
+                            // Cancel without processing
+                            await handler.toggleRecording()
+                            statusText = ""
+                        }
+                    }
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(popupBackgroundColor)
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 80) // Position above the composer
+    }
+
+    private func waveformHeight(for index: Int) -> CGFloat {
+        let baseHeight: CGFloat = 8
+        let maxHeight: CGFloat = 20
+        let variation = CGFloat(audioLevel) * (maxHeight - baseHeight)
+        // Create variation based on index for visual interest
+        let offset = sin(Double(index) * .pi / 2.5) * 0.5 + 0.5
+        return baseHeight + variation * CGFloat(offset)
     }
 
     private func handleEnterPress(with press: KeyPress) -> KeyPress.Result {
