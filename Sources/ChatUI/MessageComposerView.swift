@@ -68,7 +68,7 @@ struct MessageComposerView: View {
                 } else if let voiceHandler = viewModel.voiceInputHandler,
                           voiceHandler.isEnabled,
                           voiceHandler.replaceSendButton,
-                          viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                          localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     // Show microphone in send button position when input is empty
                     microphoneButton(handler: voiceHandler)
                         .padding(.trailing, 4)
@@ -157,13 +157,13 @@ struct MessageComposerView: View {
             Image(systemName: viewModel.showAlert ? "exclamationmark.triangle.fill" : "arrow.up.circle.fill")
                 .font(.system(size: 24))
                 .foregroundColor(
-                    viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? .gray.opacity(0.5)
                     : viewModel.showAlert ? .orange : .accentColor
                 )
         }
         .buttonStyle(BorderlessButtonStyle())
-        .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private func microphoneButton(handler: VoiceInputHandler) -> some View {
