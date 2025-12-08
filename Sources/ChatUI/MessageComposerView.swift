@@ -15,8 +15,13 @@ public protocol VoiceInputHandler: AnyObject {
     var statusDescription: String { get }
     var isEnabled: Bool { get }
     var replaceSendButton: Bool { get }
+    /// Partial transcription text (streaming/real-time updates)
+    var partialText: String { get }
+    /// Pending transcribed text that survives view recreation
+    var pendingTranscribedText: String? { get set }
 
     func toggleRecording() async
+    func cancelRecording()  // Synchronous cancel - no transcription
     func getTranscribedText() -> String?
 }
 
@@ -30,6 +35,8 @@ struct MessageComposerView: View {
     @State private var isProcessingVoice = false
     @State private var audioLevel: Float = 0.0
     @State private var statusText: String = ""
+    @State private var textFieldId = UUID() // Used to force TextField recreation
+    @State private var localInput: String = "" // Local state for TextField to bypass binding issues
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -99,10 +106,39 @@ struct MessageComposerView: View {
         .alert(isPresented: $viewModel.showError, content: {
             Alert(title: Text("Error"), message: Text($viewModel.alertInfo.wrappedValue?.title ?? ""), dismissButton: .default(Text("OK")))
         })
+        .onAppear {
+            localInput = viewModel.input  // Initialize local state from viewModel
+            consumePendingText()
+        }
+        .onChange(of: viewModel.input) { _, newValue in
+            // Sync viewModel → local (for cases where viewModel.input is set externally)
+            if localInput != newValue {
+                localInput = newValue
+            }
+        }
+        .onChange(of: viewModel.voiceInputHandler?.pendingTranscribedText) { _, _ in
+            consumePendingText()
+        }
+    }
+
+    /// Consume pending transcribed text from voice handler and set to input field
+    /// This runs AFTER view renders to avoid race condition with @Published
+    private func consumePendingText() {
+        guard let handler = viewModel.voiceInputHandler,
+              let pending = handler.pendingTranscribedText,
+              !pending.isEmpty else { return }
+
+        print("[MessageComposerView] Consuming pending text via .onAppear/.onChange: '\(pending)'")
+        // Set LOCAL state first - this reliably updates TextField
+        localInput = pending
+        // Also sync to viewModel for message sending
+        viewModel.input = pending
+        handler.pendingTranscribedText = nil
     }
 
     var textInputField: some View {
-        TextField("Enter your prompt", text: $viewModel.input, axis: .vertical)
+        TextField("Enter your prompt", text: $localInput, axis: .vertical)
+            .id(textFieldId) // Force TextField recreation when id changes to sync with binding
             .textFieldStyle(.plain)
             .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 0))
             .foregroundColor(.primary)
@@ -111,6 +147,9 @@ struct MessageComposerView: View {
             .onKeyPress(keys: .init([.return]), action: handleEnterPress)
             .focused($promptTextFieldIsActive)
             .disabled(viewModel.isMessageSending)
+            .onChange(of: localInput) { _, newValue in
+                viewModel.input = newValue  // Sync local → viewModel
+            }
     }
 
     var sendButton: some View {
@@ -153,6 +192,7 @@ struct MessageComposerView: View {
         .disabled(isProcessingVoice || viewModel.isMessageSending)
     }
 
+    @MainActor
     private func toggleVoiceRecording(handler: VoiceInputHandler) async {
         if isRecording {
             // Stop recording
@@ -164,19 +204,24 @@ struct MessageComposerView: View {
 
             // Update status during processing
             statusText = handler.statusDescription
+            print("[MessageComposerView] toggleRecording completed, status: \(handler.statusDescription)")
 
-            // Get transcribed text and append to input
+            // Get transcribed text and store in handler (survives view recreation)
+            // DON'T set viewModel.input here - let consumePendingText handle it via .onChange
             if let text = handler.getTranscribedText(), !text.isEmpty {
-                if viewModel.input.isEmpty {
-                    viewModel.input = text
-                } else {
-                    viewModel.input += " " + text
-                }
+                print("[MessageComposerView] Got transcribed text, storing as pending: '\(text)'")
+                handler.pendingTranscribedText = text
+            } else {
+                print("[MessageComposerView] getTranscribedText returned nil or empty")
             }
 
             isProcessingVoice = false
             statusText = ""
-            promptTextFieldIsActive = true
+
+            // Restore focus after a brief delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.promptTextFieldIsActive = true
+            }
         } else {
             // Start recording
             isRecording = true
@@ -236,22 +281,42 @@ struct MessageComposerView: View {
                     .controlSize(.small)
             }
 
-            Text(statusText)
-                .font(.subheadline)
-                .foregroundColor(.primary)
+            // Show partial transcription or status text
+            VStack(alignment: .leading, spacing: 2) {
+                if let handler = viewModel.voiceInputHandler,
+                   !handler.partialText.isEmpty,
+                   isRecording {
+                    // Show partial transcription
+                    Text(handler.partialText)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
 
-            Spacer()
+                    // Listening indicator
+                    HStack(spacing: 4) {
+                        Text("Listening")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
+                } else {
+                    Text(statusText)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Cancel button when recording
             if isRecording {
                 Button(action: {
-                    Task {
-                        if let handler = viewModel.voiceInputHandler {
-                            isRecording = false
-                            // Cancel without processing
-                            await handler.toggleRecording()
-                            statusText = ""
-                        }
+                    if let handler = viewModel.voiceInputHandler {
+                        isRecording = false
+                        isProcessingVoice = false  // Don't show processing state
+                        handler.cancelRecording()  // Synchronous - no await needed!
+                        statusText = ""
                     }
                 }) {
                     Image(systemName: "xmark.circle.fill")

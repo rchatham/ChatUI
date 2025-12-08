@@ -83,6 +83,7 @@ extension ChatView {
         @Published var input = ""
         @Published var showAlert = false
         private let messageService: MessageService
+        private var _messageComposerViewModel: MessageComposerView.ViewModel?
 
         public init(title: String? = nil, messageService: MessageService) {
             self.title = title
@@ -94,7 +95,12 @@ extension ChatView {
         }
 
         func messageComposerViewModel(voiceInputHandler: VoiceInputHandler? = nil) -> MessageComposerView.ViewModel {
-            return MessageComposerView.ViewModel(messageService: messageService, voiceInputHandler: voiceInputHandler)
+            if let cached = _messageComposerViewModel {
+                return cached
+            }
+            let vm = MessageComposerView.ViewModel(messageService: messageService, voiceInputHandler: voiceInputHandler)
+            _messageComposerViewModel = vm
+            return vm
         }
 
         func messageListViewModel() -> MessageListView<MessageService>.ViewModel {
