@@ -35,8 +35,8 @@ struct MessageComposerView: View {
     @State private var isProcessingVoice = false
     @State private var audioLevel: Float = 0.0
     @State private var statusText: String = ""
-    @State private var textFieldId = UUID() // Used to force TextField recreation
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
+    @State private var textFieldId = UUID() // Used to force TextField recreation
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -350,7 +350,7 @@ struct MessageComposerView: View {
         if press.modifiers.contains(.shift) {
             // Insert a new line when Shift+Enter is pressed
             Task { @MainActor in
-                viewModel.input += "\n"
+                localInput += "\n"
             }
             return .handled
         } else {
@@ -361,7 +361,10 @@ struct MessageComposerView: View {
     }
 
     func submitButtonTapped() {
-        if viewModel.isMessageSending || viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
+        if viewModel.isMessageSending || localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
+
+        // Ensure viewModel.input is synced before sending (localInput may not have triggered onChange yet)
+        viewModel.input = localInput
 
         Task {
             await viewModel.sendMessage()
