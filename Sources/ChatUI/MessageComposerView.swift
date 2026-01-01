@@ -238,6 +238,8 @@ struct MessageComposerView: View {
     }
 
     private var voiceStatusPopup: some View {
+        let audioLevel = viewModel.voiceInputHandler?.audioLevel ?? 0.0
+        
         HStack(spacing: 12) {
             // Animated indicator
             if viewModel.voiceInputHandler?.isRecording == true {
@@ -246,12 +248,12 @@ struct MessageComposerView: View {
                     ForEach(0..<5, id: \.self) { index in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.red)
-                            .frame(width: 4, height: waveformHeight(for: index, audioLevel: viewModel.voiceInputHandler?.audioLevel ?? 0.0))
+                            .frame(width: 4, height: waveformHeight(for: index, audioLevel: audioLevel))
                             .animation(
                                 .easeInOut(duration: 0.3)
                                 .repeatForever(autoreverses: true)
                                 .delay(Double(index) * 0.1),
-                                value: viewModel.voiceInputHandler?.audioLevel ?? 0.0
+                                value: audioLevel
                             )
                     }
                 }
