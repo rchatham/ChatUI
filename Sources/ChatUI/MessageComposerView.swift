@@ -81,8 +81,9 @@ struct MessageComposerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 30))
             .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
             .overlay {
+                let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
                 RoundedRectangle(cornerRadius: 30)
-                    .stroke((viewModel.voiceInputHandler?.isRecording ?? false) ? Color.red.opacity(0.8) : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3)), lineWidth: (viewModel.voiceInputHandler?.isRecording ?? false) ? 2 : 1)
+                    .stroke(isRecording ? Color.red.opacity(0.8) : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3)), lineWidth: isRecording ? 2 : 1)
             }
             .padding(8)
             }
@@ -236,34 +237,31 @@ struct MessageComposerView: View {
 
     private var voiceStatusPopup: some View {
         HStack(spacing: 12) {
-            // Get handler for accessing state
-            let voiceHandler = viewModel.voiceInputHandler
-            
             // Animated indicator
-            if voiceHandler?.isRecording == true {
+            if viewModel.voiceInputHandler?.isRecording == true {
                 // Recording waveform animation
                 HStack(spacing: 3) {
                     ForEach(0..<5, id: \.self) { index in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.red)
-                            .frame(width: 4, height: waveformHeight(for: index, audioLevel: voiceHandler?.audioLevel ?? 0.0))
+                            .frame(width: 4, height: waveformHeight(for: index, audioLevel: viewModel.voiceInputHandler?.audioLevel ?? 0.0))
                             .animation(
                                 .easeInOut(duration: 0.3)
                                 .repeatForever(autoreverses: true)
                                 .delay(Double(index) * 0.1),
-                                value: voiceHandler?.audioLevel ?? 0.0
+                                value: viewModel.voiceInputHandler?.audioLevel ?? 0.0
                             )
                     }
                 }
                 .frame(width: 32, height: 20)
-            } else if voiceHandler?.isProcessing == true {
+            } else if viewModel.voiceInputHandler?.isProcessing == true {
                 ProgressView()
                     .controlSize(.small)
             }
 
             // Show partial transcription or status text
             VStack(alignment: .leading, spacing: 2) {
-                if let handler = voiceHandler,
+                if let handler = viewModel.voiceInputHandler,
                    !handler.partialText.isEmpty,
                    handler.isRecording {
                     // Show partial transcription
@@ -281,7 +279,7 @@ struct MessageComposerView: View {
                         ProgressView()
                             .controlSize(.mini)
                     }
-                } else if let handler = voiceHandler {
+                } else if let handler = viewModel.voiceInputHandler {
                     Text(handler.statusDescription)
                         .font(.subheadline)
                         .foregroundColor(.primary)
@@ -290,7 +288,7 @@ struct MessageComposerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             // Cancel button when recording
-            if voiceHandler?.isRecording == true {
+            if viewModel.voiceInputHandler?.isRecording == true {
                 Button(action: {
                     if let handler = viewModel.voiceInputHandler {
                         handler.cancelRecording()  // Synchronous - no await needed!
