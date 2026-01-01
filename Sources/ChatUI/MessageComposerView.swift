@@ -198,9 +198,9 @@ struct MessageComposerView: View {
             // Stop recording
             isRecording = false
             isProcessingVoice = true
-            statusText = "Processing..."
 
             await handler.toggleRecording()
+            isRecording = false
 
             // Update status during processing
             statusText = handler.statusDescription
