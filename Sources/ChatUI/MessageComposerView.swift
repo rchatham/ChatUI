@@ -22,6 +22,12 @@ public protocol VoiceInputHandler: AnyObject {
 
     func toggleRecording() async
     func cancelRecording()  // Synchronous cancel - no transcription
+    /// Returns the transcribed text from the most recent voice recording session.
+    ///
+    /// - Returns: The transcribed text as a `String?`, or `nil` if no transcription is available.
+    /// - Note: This method can be called multiple times after recording stops to retrieve the transcribed text.
+    ///         It does **not** clear the internal transcribed text after being called; the same value will be returned
+    ///         until a new recording session is completed and new transcription is available.
     func getTranscribedText() -> String?
 }
 
