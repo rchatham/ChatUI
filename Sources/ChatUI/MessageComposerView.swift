@@ -35,6 +35,9 @@ struct MessageComposerView: View {
     @State private var textFieldId = UUID() // Used to force TextField recreation
 
     var body: some View {
+        let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
+        let isProcessing = viewModel.voiceInputHandler?.isProcessing ?? false
+        
         ZStack(alignment: .bottom) {
             // Status popup overlay
             if let voiceHandler = viewModel.voiceInputHandler,
@@ -57,7 +60,7 @@ struct MessageComposerView: View {
 
                 textInputField
 
-                if viewModel.isMessageSending || (viewModel.voiceInputHandler?.isProcessing ?? false) {
+                if viewModel.isMessageSending || isProcessing {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                         .padding(.trailing, 4)
@@ -81,15 +84,14 @@ struct MessageComposerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 30))
             .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
             .overlay {
-                let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
                 RoundedRectangle(cornerRadius: 30)
                     .stroke(isRecording ? Color.red.opacity(0.8) : (colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.3)), lineWidth: isRecording ? 2 : 1)
             }
             .padding(8)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: viewModel.voiceInputHandler?.isRecording ?? false)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.voiceInputHandler?.isProcessing ?? false)
+        .animation(.easeInOut(duration: 0.2), value: isRecording)
+        .animation(.easeInOut(duration: 0.2), value: isProcessing)
         .alert(viewModel.alertInfo?.title ?? "///Missing title///", isPresented: $viewModel.showAlert, actions: {
             if let alertInfo = $viewModel.alertInfo.wrappedValue, let tf = alertInfo.textField, let bt = alertInfo.button {
                 TextField(tf.label, text: tf.text)
