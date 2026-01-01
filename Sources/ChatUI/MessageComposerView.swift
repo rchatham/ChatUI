@@ -37,7 +37,7 @@ struct MessageComposerView: View {
     @State private var statusText: String = ""
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
     @State private var textFieldId = UUID() // Used to force TextField recreation
-    @State private var audioLevelTask: Task<Void, Never>? = nil // Task for monitoring audio level
+    @State private var audioLevelTask: Task<Void, Never>? // Task for monitoring audio level
 
     var body: some View {
         ZStack(alignment: .bottom) {
