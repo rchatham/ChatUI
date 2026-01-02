@@ -20,7 +20,7 @@ public protocol VoiceInputHandler: AnyObject, ObservableObject {
     /// Pending transcribed text that survives view recreation
     var pendingTranscribedText: String? { get set }
 
-    func toggleRecording() async
+    func toggleRecording() async throws
     func cancelRecording()  // Synchronous cancel - no transcription
     /// Returns the transcribed text from the most recent voice recording session.
     ///
@@ -211,7 +211,12 @@ struct MessageComposerView: View {
             
             isProcessingVoice = true
 
-            await handler.toggleRecording()
+            do {
+                try await handler.toggleRecording()
+            } catch {
+                // Handle recording stop errors
+                viewModel.handleError(error)
+            }
             isRecording = false
 
             print("[MessageComposerView] toggleRecording completed, status: \(handler.statusDescription)")
@@ -231,7 +236,13 @@ struct MessageComposerView: View {
             }
         } else {
             // Start recording - handler will update its state
-            await handler.toggleRecording()
+            do {
+                try await handler.toggleRecording()
+            } catch {
+                // Handle recording start errors (e.g., permission denial)
+                viewModel.handleError(error)
+                return
+            }
 
             // Update audio level and status periodically while recording
             audioLevelTask = Task {
