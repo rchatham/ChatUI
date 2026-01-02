@@ -153,7 +153,7 @@ struct MessageComposerView: View {
             .multilineTextAlignment(.leading)
             .onKeyPress(keys: .init([.return]), action: handleEnterPress)
             .focused($promptTextFieldIsActive)
-            .disabled(viewModel.isMessageSending)
+            .disabled(viewModel.isMessageSending || isProcessingVoice)
             .onChange(of: localInput) { _, newValue in
                 viewModel.input = newValue  // Sync local → viewModel
             }
