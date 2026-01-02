@@ -43,6 +43,7 @@ struct MessageComposerView: View {
     @State private var statusText: String = ""
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
     @State private var textFieldId = UUID() // Used to force TextField recreation
+    @State private var audioLevelTask: Task<Void, Never>? // Task for monitoring audio level
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -203,6 +204,11 @@ struct MessageComposerView: View {
         if isRecording {
             // Stop recording
             isRecording = false
+            
+            // Cancel the audio level monitoring task
+            audioLevelTask?.cancel()
+            audioLevelTask = nil
+            
             isProcessingVoice = true
 
             await handler.toggleRecording()
@@ -235,7 +241,7 @@ struct MessageComposerView: View {
             await handler.toggleRecording()
 
             // Update audio level and status periodically while recording
-            Task {
+            audioLevelTask = Task {
                 while isRecording {
                     audioLevel = handler.audioLevel
                     statusText = handler.statusDescription
