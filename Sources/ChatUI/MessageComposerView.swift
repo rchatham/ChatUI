@@ -22,6 +22,12 @@ public protocol VoiceInputHandler: AnyObject, ObservableObject {
 
     func toggleRecording() async
     func cancelRecording()  // Synchronous cancel - no transcription
+    /// Returns the transcribed text from the most recent voice recording session.
+    ///
+    /// - Returns: The transcribed text as a `String?`, or `nil` if no transcription is available.
+    /// - Note: This method can be called multiple times after recording stops to retrieve the transcribed text.
+    ///         It does **not** clear the internal transcribed text after being called; the same value will be returned
+    ///         until a new recording session is completed and new transcription is available.
     func getTranscribedText() -> String?
 }
 
@@ -33,6 +39,7 @@ struct MessageComposerView: View {
     // Local UI state (not duplicating handler state)
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
     @State private var textFieldId = UUID() // Used to force TextField recreation
+    @State private var audioLevelTask: Task<Void, Never>? // Task for monitoring audio level
 
     var body: some View {
         let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
@@ -196,7 +203,16 @@ struct MessageComposerView: View {
     private func toggleVoiceRecording(handler: VoiceInputHandler) async {
         if handler.isRecording {
             // Stop recording - handler will update its state
+            isRecording = false
+            
+            // Cancel the audio level monitoring task
+            audioLevelTask?.cancel()
+            audioLevelTask = nil
+            
+            isProcessingVoice = true
+
             await handler.toggleRecording()
+            isRecording = false
 
             print("[MessageComposerView] toggleRecording completed, status: \(handler.statusDescription)")
 
@@ -216,6 +232,15 @@ struct MessageComposerView: View {
         } else {
             // Start recording - handler will update its state
             await handler.toggleRecording()
+
+            // Update audio level and status periodically while recording
+            audioLevelTask = Task {
+                while isRecording {
+                    audioLevel = handler.audioLevel
+                    statusText = handler.statusDescription
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                }
+            }
         }
     }
 
