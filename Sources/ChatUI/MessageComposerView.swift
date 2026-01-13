@@ -303,7 +303,7 @@ struct MessageComposerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let handler = viewModel.voiceInputHandler,
                    !handler.partialText.isEmpty,
-                   handler.isRecording {
+                   (handler.isRecording || handler.isProcessing) {
                     // Show partial transcription
                     Text(handler.partialText)
                         .font(.body)
@@ -311,9 +311,9 @@ struct MessageComposerView: View {
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
 
-                    // Listening indicator
+                    // Status indicator (Listening while recording, Transcribing while processing)
                     HStack(spacing: 4) {
-                        Text("Listening")
+                        Text(handler.isRecording ? "Listening" : "Transcribing")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         ProgressView()
