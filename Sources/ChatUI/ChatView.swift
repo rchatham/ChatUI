@@ -8,43 +8,24 @@ import SwiftUI
 import CoreData
 import Combine
 
-public struct ChatView<MessageService: ChatMessageService>: View {
+public struct ChatView<MessageService: ChatMessageService, SettingsView: View, MessageComposerAccessoryView: View>: View {
     @ObservedObject var viewModel: ViewModel
-    private var _settingsView: (() -> AnyView)?
-    private var _messageContent: ((MessageService.ChatMessage) -> AnyView)?
-    private var voiceInputHandler: VoiceInputHandler?
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: VoiceInputHandler? = nil) {
-        viewModel = ViewModel(title: title, messageService: messageService)
-        _settingsView = settingsView
-        _messageContent = nil
-        self.voiceInputHandler = voiceInputHandler
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?, messageComposerAccessoryView: (() -> [MessageComposerAccessoryView])? = nil) {
+        viewModel = ViewModel(title: title, messageService: messageService, settingsView: settingsView, messageComposerAccessoryView: messageComposerAccessoryView)
     }
 
-    public init(
-        title: String? = nil,
-        messageService: MessageService,
-        settingsView: (() -> AnyView)? = nil,
-        voiceInputHandler: VoiceInputHandler? = nil,
-        @ViewBuilder messageContent: @escaping (MessageService.ChatMessage) -> some View
-    ) {
-        viewModel = ViewModel(title: title, messageService: messageService)
-        _settingsView = settingsView
-        _messageContent = { message in AnyView(messageContent(message)) }
-        self.voiceInputHandler = voiceInputHandler
-    }
-
-    public init(viewModel: ViewModel, voiceInputHandler: VoiceInputHandler? = nil) {
+    public init(viewModel: ViewModel) {
         self.viewModel = viewModel
-        _messageContent = nil
-        self.voiceInputHandler = voiceInputHandler
     }
 
     public var body: some View {
-        if let title = viewModel.title {
-            chatView.navigationTitle(title)
-        } else {
-            chatView
+        NavigationStack {
+            if let title = viewModel.title {
+                chatView.navigationTitle(title)
+            } else {
+                chatView
+            }
         }
     }
 
@@ -55,11 +36,11 @@ public struct ChatView<MessageService: ChatMessageService>: View {
                 .invalidInputAlert(isPresented: $viewModel.showAlert)
         }
         .toolbar {
-            if let settingsView = _settingsView?() {
-                NavigationLink(destination: settingsView) {
-                    Image(systemName: "gear")
-                }
+            #if DEBUG
+            NavigationLink(destination: viewModel.settingsView()) {
+                Image(systemName: "gear")
             }
+            #endif
         }
         #if os(iOS)
         .dismissKeyboardOnSwipe()
@@ -68,12 +49,12 @@ public struct ChatView<MessageService: ChatMessageService>: View {
 
     @ViewBuilder
     var messageList: some View {
-        MessageListView(viewModel: viewModel.messageListViewModel(), messageContent: _messageContent)
+        MessageListView(viewModel: viewModel.messageListViewModel())
     }
 
     @ViewBuilder
     var messageComposerView: some View {
-        MessageComposerView(viewModel: viewModel.messageComposerViewModel(voiceInputHandler: voiceInputHandler))
+        MessageComposerView(viewModel: viewModel.messageComposerViewModel())
     }
 }
 
@@ -83,28 +64,30 @@ extension ChatView {
         @Published var input = ""
         @Published var showAlert = false
         private let messageService: MessageService
-        private var _messageComposerViewModel: MessageComposerView.ViewModel?
+        private var _settingView: (() -> SettingsView)?
+        private var _accessoryViews: (() -> [MessageComposerAccessoryView])?
 
-        public init(title: String? = nil, messageService: MessageService) {
+        public init(title: String? = nil, messageService: MessageService, settingsView: (() -> SettingsView)?, messageComposerAccessoryView: (() -> [MessageComposerAccessoryView])? = nil) {
             self.title = title
             self.messageService = messageService
+            _settingView = settingsView
+            _accessoryViews = messageComposerAccessoryView
         }
 
         func delete(id: UUID) {
             messageService.deleteMessage(id: id)
         }
 
-        func messageComposerViewModel(voiceInputHandler: VoiceInputHandler? = nil) -> MessageComposerView.ViewModel {
-            if let cached = _messageComposerViewModel {
-                return cached
-            }
-            let vm = MessageComposerView.ViewModel(messageService: messageService, voiceInputHandler: voiceInputHandler)
-            _messageComposerViewModel = vm
-            return vm
+        func settingsView() -> (some View)? {
+            return _settingView?()
+        }
+        
+        func messageComposerViewModel() -> MessageComposerView.ViewModel {
+            return .init(messageService: messageService)
         }
 
         func messageListViewModel() -> MessageListView<MessageService>.ViewModel {
-            return MessageListView.ViewModel(messageService: messageService)
+            return .init(messageService: messageService)
         }
     }
 }
