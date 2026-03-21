@@ -40,6 +40,10 @@ struct MessageComposerView: View {
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
     @State private var textFieldId = UUID() // Used to force TextField recreation
     @State private var audioLevelTask: Task<Void, Never>? // Task for monitoring audio level
+    @State private var isRecording: Bool = false
+    @State private var isProcessingVoice: Bool = false
+    @State private var audioLevel: Float = 0.0
+    @State private var statusText: String = ""
 
     var body: some View {
         let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
@@ -173,7 +177,7 @@ struct MessageComposerView: View {
         .disabled(localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
-    private func microphoneButton(handler: VoiceInputHandler) -> some View {
+    private func microphoneButton(handler: any VoiceInputHandler) -> some View {
         Button(action: {
             Task {
                 await toggleVoiceRecording(handler: handler)
@@ -200,7 +204,7 @@ struct MessageComposerView: View {
     }
 
     @MainActor
-    private func toggleVoiceRecording(handler: VoiceInputHandler) async {
+    private func toggleVoiceRecording(handler: any VoiceInputHandler) async {
         if handler.isRecording {
             // Stop recording - handler will update its state
             isRecording = false
@@ -275,8 +279,7 @@ struct MessageComposerView: View {
 
     private var voiceStatusPopup: some View {
         let audioLevel = viewModel.voiceInputHandler?.audioLevel ?? 0.0
-        
-        HStack(spacing: 12) {
+        return HStack(spacing: 12) {
             // Animated indicator
             if viewModel.voiceInputHandler?.isRecording == true {
                 // Recording waveform animation
@@ -398,9 +401,9 @@ extension MessageComposerView {
         @Published var isMessageSending: Bool = false
 
         nonisolated private let messageService: any ChatMessageService
-        let voiceInputHandler: VoiceInputHandler?
+        let voiceInputHandler: (any VoiceInputHandler)?
 
-        init(messageService: any ChatMessageService, voiceInputHandler: VoiceInputHandler? = nil) {
+        init(messageService: any ChatMessageService, voiceInputHandler: (any VoiceInputHandler)? = nil) {
             self.messageService = messageService
             self.voiceInputHandler = voiceInputHandler
         }

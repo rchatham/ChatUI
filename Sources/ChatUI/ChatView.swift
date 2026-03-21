@@ -12,9 +12,9 @@ public struct ChatView<MessageService: ChatMessageService>: View {
     @ObservedObject var viewModel: ViewModel
     private var _settingsView: (() -> AnyView)?
     private var _messageContent: ((MessageService.ChatMessage) -> AnyView)?
-    private var voiceInputHandler: VoiceInputHandler?
+    private var voiceInputHandler: (any VoiceInputHandler)?
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: VoiceInputHandler? = nil) {
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil) {
         viewModel = ViewModel(title: title, messageService: messageService)
         _settingsView = settingsView
         _messageContent = nil
@@ -25,7 +25,7 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         title: String? = nil,
         messageService: MessageService,
         settingsView: (() -> AnyView)? = nil,
-        voiceInputHandler: VoiceInputHandler? = nil,
+        voiceInputHandler: (any VoiceInputHandler)? = nil,
         @ViewBuilder messageContent: @escaping (MessageService.ChatMessage) -> some View
     ) {
         viewModel = ViewModel(title: title, messageService: messageService)
@@ -34,7 +34,7 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         self.voiceInputHandler = voiceInputHandler
     }
 
-    public init(viewModel: ViewModel, voiceInputHandler: VoiceInputHandler? = nil) {
+    public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil) {
         self.viewModel = viewModel
         _messageContent = nil
         self.voiceInputHandler = voiceInputHandler
@@ -94,7 +94,7 @@ extension ChatView {
             messageService.deleteMessage(id: id)
         }
 
-        func messageComposerViewModel(voiceInputHandler: VoiceInputHandler? = nil) -> MessageComposerView.ViewModel {
+        func messageComposerViewModel(voiceInputHandler: (any VoiceInputHandler)? = nil) -> MessageComposerView.ViewModel {
             if let cached = _messageComposerViewModel {
                 return cached
             }
