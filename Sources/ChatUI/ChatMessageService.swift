@@ -22,7 +22,7 @@ public protocol ChatMessageInfo: Sendable, ObservableObject, Identifiable, Hasha
 
 public protocol ChatMessageService: Sendable, ObservableObject {
     associatedtype ChatMessage: ChatMessageInfo
-    var chatMessages: [ChatMessage] { get set }
+    var chatMessages: [ChatMessage] { get }
     func send(message: String, stream: Bool) async throws
     func handleError(error: Error) -> ChatAlertInfo?
     func deleteMessage(id: UUID)
