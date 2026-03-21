@@ -54,7 +54,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
 
 extension MessageListView {
     @MainActor class ViewModel: ObservableObject {
-        var messageService: MessageService
+        @Published var messageService: MessageService
 
         init(messageService: MessageService) {
             self.messageService = messageService

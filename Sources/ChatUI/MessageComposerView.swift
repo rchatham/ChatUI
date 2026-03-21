@@ -39,11 +39,6 @@ struct MessageComposerView: View {
     // Local UI state (not duplicating handler state)
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
     @State private var textFieldId = UUID() // Used to force TextField recreation
-    @State private var audioLevelTask: Task<Void, Never>? // Task for monitoring audio level
-    @State private var isRecording: Bool = false
-    @State private var isProcessingVoice: Bool = false
-    @State private var audioLevel: Float = 0.0
-    @State private var statusText: String = ""
 
     var body: some View {
         let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
@@ -157,7 +152,7 @@ struct MessageComposerView: View {
             .multilineTextAlignment(.leading)
             .onKeyPress(keys: .init([.return]), action: handleEnterPress)
             .focused($promptTextFieldIsActive)
-            .disabled(viewModel.isMessageSending || isProcessingVoice)
+            .disabled(viewModel.isMessageSending || viewModel.voiceInputHandler?.isProcessing ?? false)
             .onChange(of: localInput) { _, newValue in
                 viewModel.input = newValue  // Sync local → viewModel
             }
@@ -207,32 +202,29 @@ struct MessageComposerView: View {
     private func toggleVoiceRecording(handler: any VoiceInputHandler) async {
         if handler.isRecording {
             // Stop recording - handler will update its state
-            isRecording = false
-            
-            // Cancel the audio level monitoring task
-            audioLevelTask?.cancel()
-            audioLevelTask = nil
-            
-            isProcessingVoice = true
-
             do {
                 try await handler.toggleRecording()
             } catch {
                 // Handle recording stop errors
                 viewModel.handleError(error)
             }
-            isRecording = false
 
             print("[MessageComposerView] toggleRecording completed, status: \(handler.statusDescription)")
 
-            // Get transcribed text and store in handler (survives view recreation)
-            // DON'T set viewModel.input here - let consumePendingText handle it via .onChange
+            // DIRECT consumption - don't rely on .onChange (SwiftUI doesn't observe protocol existentials well)
             if let text = handler.getTranscribedText(), !text.isEmpty {
-                print("[MessageComposerView] Got transcribed text, storing as pending: '\(text)'")
-                handler.pendingTranscribedText = text
+                print("[MessageComposerView] Got transcribed text: '\(text)'")
+                localInput = text
+                viewModel.input = text
+            } else if let pending = handler.pendingTranscribedText, !pending.isEmpty {
+                print("[MessageComposerView] Using pending text: '\(pending)'")
+                localInput = pending
+                viewModel.input = pending
             } else {
-                print("[MessageComposerView] getTranscribedText returned nil or empty")
+                print("[MessageComposerView] No transcribed text available")
             }
+            // Clear pending to avoid double-consumption
+            handler.pendingTranscribedText = nil
 
             // Restore focus after a brief delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -246,15 +238,6 @@ struct MessageComposerView: View {
                 // Handle recording start errors (e.g., permission denial)
                 viewModel.handleError(error)
                 return
-            }
-
-            // Update audio level and status periodically while recording
-            audioLevelTask = Task {
-                while isRecording {
-                    audioLevel = handler.audioLevel
-                    statusText = handler.statusDescription
-                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
-                }
             }
         }
     }
@@ -279,6 +262,7 @@ struct MessageComposerView: View {
 
     private var voiceStatusPopup: some View {
         let audioLevel = viewModel.voiceInputHandler?.audioLevel ?? 0.0
+        
         return HStack(spacing: 12) {
             // Animated indicator
             if viewModel.voiceInputHandler?.isRecording == true {
@@ -306,7 +290,7 @@ struct MessageComposerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let handler = viewModel.voiceInputHandler,
                    !handler.partialText.isEmpty,
-                   handler.isRecording {
+                   (handler.isRecording || handler.isProcessing) {
                     // Show partial transcription
                     Text(handler.partialText)
                         .font(.body)
@@ -314,9 +298,9 @@ struct MessageComposerView: View {
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
 
-                    // Listening indicator
+                    // Status indicator (Listening while recording, Transcribing while processing)
                     HStack(spacing: 4) {
-                        Text("Listening")
+                        Text(handler.isRecording ? "Listening" : "Transcribing")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         ProgressView()
@@ -401,7 +385,7 @@ extension MessageComposerView {
         @Published var isMessageSending: Bool = false
 
         nonisolated private let messageService: any ChatMessageService
-        let voiceInputHandler: (any VoiceInputHandler)?
+        @Published var voiceInputHandler: (any VoiceInputHandler)?
 
         init(messageService: any ChatMessageService, voiceInputHandler: (any VoiceInputHandler)? = nil) {
             self.messageService = messageService
