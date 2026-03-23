@@ -365,10 +365,11 @@ struct MessageComposerView: View {
     func submitButtonTapped() {
         if viewModel.isMessageSending || localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
 
-        // Ensure viewModel.input is synced before sending (localInput may not have triggered onChange yet)
-        viewModel.input = localInput
 
         Task {
+            // Ensure viewModel.input is synced before sending (localInput may not have triggered onChange yet)
+            viewModel.input = localInput
+
             await viewModel.sendMessage()
             promptTextFieldIsActive = true
         }
