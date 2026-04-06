@@ -9,13 +9,13 @@ import CoreData
 import Combine
 
 public struct ChatView<MessageService: ChatMessageService>: View {
-    @ObservedObject var viewModel: ViewModel
+    @StateObject var viewModel: ViewModel
     private var _settingsView: (() -> AnyView)?
     private var _messageContent: ((MessageService.ChatMessage) -> AnyView)?
     private var voiceInputHandler: (any VoiceInputHandler)?
 
     public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil) {
-        viewModel = ViewModel(title: title, messageService: messageService)
+        _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
         _messageContent = nil
         self.voiceInputHandler = voiceInputHandler
@@ -28,14 +28,14 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         voiceInputHandler: (any VoiceInputHandler)? = nil,
         @ViewBuilder messageContent: @escaping (MessageService.ChatMessage) -> some View
     ) {
-        viewModel = ViewModel(title: title, messageService: messageService)
+        _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
         _messageContent = { message in AnyView(messageContent(message)) }
         self.voiceInputHandler = voiceInputHandler
     }
 
     public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil) {
-        self.viewModel = viewModel
+        _viewModel = StateObject(wrappedValue: viewModel)
         _messageContent = nil
         self.voiceInputHandler = voiceInputHandler
     }
