@@ -418,13 +418,13 @@ extension MessageComposerView {
         }
 
         func handleError(_ error: any Error) {
-            if let alertInfo = messageService.handleError(error: error) {
-                self.alertInfo = alertInfo
-                self.showAlert = true
-            } else {
-                self.alertInfo = ChatAlertInfo(title: "Error!", textField: nil , button: nil, message: "Error sending message completion request: \(error.localizedDescription)")
-                self.showError = true
-            }
+            // If handleError returns nil the service handled the error itself
+            // (e.g. posted a notification to show an auth sheet). Don't show
+            // a generic fallback alert in that case — it would conflict with
+            // whatever the service already did.
+            guard let alertInfo = messageService.handleError(error: error) else { return }
+            self.alertInfo = alertInfo
+            self.showAlert = true
         }
     }
 }
