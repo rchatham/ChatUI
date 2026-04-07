@@ -113,12 +113,21 @@ struct MessageComposerView: View {
             Alert(title: Text("Error"), message: Text($viewModel.alertInfo.wrappedValue?.title ?? ""), dismissButton: .default(Text("OK")))
         })
         .onAppear {
-            localInput = viewModel.input  // Initialize local state from viewModel
+            // Only initialise from the ViewModel when the local field is empty
+            // (avoids wiping text the user has already typed if the view re-appears
+            // due to parent re-renders triggered by VoiceInputHandlerAdapter events).
+            if localInput.isEmpty {
+                localInput = viewModel.input
+            }
             consumePendingText()
         }
         .onChange(of: viewModel.input) { _, newValue in
-            // Sync viewModel → local (for cases where viewModel.input is set externally)
-            if localInput != newValue {
+            // Sync viewModel → local only when the change is meaningful:
+            // • newValue is non-empty  → explicit external set (e.g. voice transcription)
+            // • newValue is empty AND localInput is also empty → intentional clear after send
+            // Never wipe non-empty localInput with an empty viewModel value
+            // (guards against spurious resets from view re-mounting).
+            if localInput != newValue, !newValue.isEmpty || localInput.isEmpty {
                 localInput = newValue
             }
         }
