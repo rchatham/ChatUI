@@ -11,13 +11,13 @@ import Combine
 public struct ChatView<MessageService: ChatMessageService>: View {
     @StateObject var viewModel: ViewModel
     private var _settingsView: (() -> AnyView)?
-    private var _messageContent: ((MessageService.ChatMessage) -> AnyView)?
+    private var _supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
     private var voiceInputHandler: (any VoiceInputHandler)?
 
     public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil) {
         _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
-        _messageContent = nil
+        _supplementaryContent = nil
         self.voiceInputHandler = voiceInputHandler
     }
 
@@ -26,17 +26,17 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         messageService: MessageService,
         settingsView: (() -> AnyView)? = nil,
         voiceInputHandler: (any VoiceInputHandler)? = nil,
-        @ViewBuilder messageContent: @escaping (MessageService.ChatMessage) -> some View
+        supplementaryContent: @escaping (MessageService.ChatMessage) -> AnyView?
     ) {
         _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
-        _messageContent = { message in AnyView(messageContent(message)) }
+        _supplementaryContent = supplementaryContent
         self.voiceInputHandler = voiceInputHandler
     }
 
     public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel)
-        _messageContent = nil
+        _supplementaryContent = nil
         self.voiceInputHandler = voiceInputHandler
     }
 
@@ -68,7 +68,7 @@ public struct ChatView<MessageService: ChatMessageService>: View {
 
     @ViewBuilder
     var messageList: some View {
-        MessageListView(viewModel: viewModel.messageListViewModel(), messageContent: _messageContent)
+        MessageListView(viewModel: viewModel.messageListViewModel(), supplementaryContent: _supplementaryContent)
     }
 
     @ViewBuilder

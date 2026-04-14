@@ -8,14 +8,19 @@ import SwiftUI
 
 struct MessageListView<MessageService: ChatMessageService>: View {
     @StateObject var viewModel: ViewModel
-    var messageContent: ((MessageService.ChatMessage) -> AnyView)?
+    var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
 
     var body: some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
                 LazyVStack(alignment: .leading) {
                     ForEach(viewModel.messageService.chatMessages, id: \.uuid) { message in
-                        CollapsibleMessageView(message: message, parentIsExpanded: .constant(false), messageContent: messageContent)
+                        VStack(alignment: .leading, spacing: 4) {
+                            CollapsibleMessageView(message: message, parentIsExpanded: .constant(false))
+                            if let supplementary = supplementaryContent?(message) {
+                                supplementary
+                            }
+                        }
                     }
                 }
                 .padding(16)

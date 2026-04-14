@@ -14,7 +14,7 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
     @Binding var parentIsExpanded: Bool?
-    var messageContent: ((Message) -> AnyView)?
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -33,32 +33,19 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                 HStack {
                     if message.isUser { Spacer() }
                     VStack(alignment: .leading) {
-                        if let customContent = messageContent {
-                            // Use custom content view
-                            HStack {
-                                if !message.childChatMessages.isEmpty {
-                                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(messageColor.opacity(0.7))
-                                }
-                                customContent(message)
+                        HStack {
+                            if !message.childChatMessages.isEmpty {
+                                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(messageColor.opacity(0.7))
                             }
-                        } else {
-                            // Default content view
-                            HStack {
-                                if !message.childChatMessages.isEmpty {
-                                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(messageColor.opacity(0.7))
-                                }
-                                Text(message.text ?? "")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(messageColor)
-                            }
-                            .padding(10)
-                            .background(backgroundColor)
-                            .cornerRadius(10)
+                            Text(message.text ?? "")
+                                .font(.system(size: 16))
+                                .foregroundColor(messageColor)
                         }
+                        .padding(10)
+                        .background(backgroundColor)
+                        .cornerRadius(10)
                     }
                     if message.isAssistant { Spacer() }
                 }
@@ -72,7 +59,7 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                         let binding = Binding<Bool?>(
                             get: { isExpanded },
                             set: { val in isExpanded = val ?? false })
-                        CollapsibleMessageView(message: childMessage, parentIsExpanded: binding, messageContent: messageContent)
+                        CollapsibleMessageView(message: childMessage, parentIsExpanded: binding)
                             .padding(.leading, 16)
                     }
                 }
