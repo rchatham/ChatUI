@@ -15,63 +15,80 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
     @State private var isExpanded = false
     @Binding var parentIsExpanded: Bool?
 
+    var isHidden: Bool {
+        return (message.text == nil || message.text?.isEmpty ?? false) && message.childChatMessages.isEmpty
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Main message bubble
-            Button(action: {
-                if !message.childChatMessages.isEmpty {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
-                } else {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        parentIsExpanded = false
-                    }
+        if !isHidden {
+            VStack(alignment: .leading, spacing: 4) {
+                // Main message bubble
+                Button(action: action) {
+                    messageView
                 }
-            }) {
-                HStack {
-                    if message.isUser { Spacer() }
-                    VStack(alignment: .leading) {
-                        HStack {
-                            if !message.childChatMessages.isEmpty {
-                                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(messageColor.opacity(0.7))
-                            }
-                            Text(message.text ?? "")
-                                .font(.system(size: 16))
-                                .foregroundColor(messageColor)
-                        }
-                        .padding(10)
-                        .background(backgroundColor)
-                        .cornerRadius(10)
-                    }
-                    if message.isAssistant { Spacer() }
+                .buttonStyle(PlainButtonStyle())
+
+                // Child messages
+                if isExpanded {
+                    childMessagesView
                 }
             }
-            .buttonStyle(PlainButtonStyle())
+        }
+    }
 
-            // Child messages
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(message.childChatMessages) { childMessage in
-                        let binding = Binding<Bool?>(
-                            get: { isExpanded },
-                            set: { val in isExpanded = val ?? false })
-                        CollapsibleMessageView(message: childMessage, parentIsExpanded: binding)
-                            .padding(.leading, 16)
+    var messageView: some View {
+        HStack {
+            if message.isUser { Spacer() }
+            VStack(alignment: .leading) {
+                HStack {
+                    if !message.childChatMessages.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 12))
+                            .foregroundColor(messageColor.opacity(0.7))
                     }
+                    Text(message.text ?? "")
+                        .font(.system(size: 16))
+                        .foregroundColor(messageColor)
                 }
-                .padding(.top, 4)
-                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
-                .overlay(
-                    Rectangle()
-                        .frame(width: 2)
-                        .foregroundColor(Color.gray.opacity(0.3))
-                        .padding(.leading, 7),
-                    alignment: .leading
-                )
+                .padding(10)
+                .background(backgroundColor)
+                .cornerRadius(10)
+            }
+            if message.isAssistant { Spacer() }
+        }
+    }
+
+    var childMessagesView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(message.childChatMessages) { childMessage in
+                let binding = Binding<Bool?>(
+                    get: { isExpanded },
+                    set: { val in isExpanded = val ?? false })
+                CollapsibleMessageView(message: childMessage, parentIsExpanded: binding)
+                    .padding(.leading, 16)
+            }
+        }
+        .padding(.top, 4)
+        .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
+        .overlay(
+            Rectangle()
+                .frame(width: 2)
+                .foregroundColor(Color.gray.opacity(0.3))
+                .padding(.leading, 7),
+            alignment: .leading
+        )
+    }
+
+    var action: () -> Void {
+        return {
+            if !message.childChatMessages.isEmpty {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    parentIsExpanded = false
+                }
             }
         }
     }
