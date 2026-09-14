@@ -154,6 +154,7 @@ struct MessageComposerView: View {
     var textInputField: some View {
         TextField("Enter your prompt", text: $localInput, axis: .vertical)
             .id(textFieldId) // Force TextField recreation when id changes to sync with binding
+            .accessibilityIdentifier("chat.promptInput")
             .textFieldStyle(.plain)
             .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 0))
             .foregroundColor(.primary)
@@ -177,6 +178,7 @@ struct MessageComposerView: View {
                     : viewModel.showAlert ? .orange : .accentColor
                 )
         }
+        .accessibilityIdentifier("chat.sendButton")
         .buttonStyle(BorderlessButtonStyle())
         .disabled(localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
