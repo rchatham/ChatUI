@@ -163,6 +163,7 @@ struct MessageComposerView: View {
             .onKeyPress(keys: .init([.return]), action: handleEnterPress)
             .focused($promptTextFieldIsActive)
             .disabled(viewModel.isMessageSending || viewModel.voiceInputHandler?.isProcessing ?? false)
+            .accessibilityIdentifier("messageInput")
             .onChange(of: localInput) { _, newValue in
                 viewModel.input = newValue  // Sync local → viewModel
             }
@@ -180,6 +181,8 @@ struct MessageComposerView: View {
         }
         .accessibilityIdentifier("chat.sendButton")
         .buttonStyle(BorderlessButtonStyle())
+        .accessibilityLabel("Send")
+        .accessibilityIdentifier("sendButton")
         .disabled(localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
