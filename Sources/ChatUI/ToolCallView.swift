@@ -12,35 +12,31 @@ struct ToolCallView: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 8) {
-                    if toolCall.status == .pending {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(toolCall.status.tint)
-                    } else {
-                        Image(systemName: toolCall.status.symbolName)
-                            .foregroundStyle(toolCall.status.tint)
-                    }
+                HStack(spacing: 6) {
+                    statusIcon
                     Text(toolCall.name)
                         .font(.subheadline.weight(.medium))
-                    Spacer()
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
                     Text(toolCall.status.label)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
             .buttonStyle(.plain)
 
             if isExpanded {
+                Divider()
                 if let arguments = toolCall.arguments, !arguments.isEmpty {
                     detail(title: "Input", value: arguments)
                 }
@@ -49,20 +45,33 @@ struct ToolCallView: View {
                 }
             }
         }
-        .padding(10)
-        .background(.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Tool \(toolCall.name), \(toolCall.status.label)")
     }
 
+    @ViewBuilder
+    private var statusIcon: some View {
+        if toolCall.status == .pending {
+            ProgressView()
+                .controlSize(.small)
+                .tint(toolCall.status.tint)
+        } else {
+            Image(systemName: toolCall.status.symbolName)
+                .font(.subheadline)
+                .foregroundStyle(toolCall.status.tint)
+        }
+    }
+
     private func detail(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
