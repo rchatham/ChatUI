@@ -9,15 +9,53 @@ import Foundation
 import Combine
 import SwiftUI
 
+/// A tool invocation associated with a chat message.
+///
+/// A call remains ``Status/pending`` until its host app records either a successful
+/// or failed result. `arguments` and `result` are presented as expandable details.
+public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
+    public enum Status: Sendable, Hashable, Codable {
+        case pending
+        case success
+        case failure
+    }
+
+    /// A stable identifier supplied by the tool provider or host app.
+    public let id: String
+    /// The human-readable tool name displayed in the conversation.
+    public let name: String
+    /// The serialized tool input, if available.
+    public let arguments: String?
+    /// The tool execution state.
+    public let status: Status
+    /// The serialized tool output or error, if execution has completed.
+    public let result: String?
+
+    public init(id: String, name: String, arguments: String? = nil, status: Status = .pending, result: String? = nil) {
+        self.id = id
+        self.name = name
+        self.arguments = arguments
+        self.status = status
+        self.result = result
+    }
+}
+
 public protocol ChatMessageInfo: Sendable, ObservableObject, Identifiable, Hashable where ID == UUID {
     var uuid: UUID { get }
     var text: String? { get }
+    /// Tool invocations made while producing this message.
+    var toolCalls: [ChatToolCall] { get }
 
     var childChatMessages: [Self] { get }
 
     var isUser: Bool { get }
     var isAssistant: Bool { get }
     var isAgentEvent: Bool { get }
+}
+
+public extension ChatMessageInfo {
+    /// Existing message models without tool activity continue to render normally.
+    var toolCalls: [ChatToolCall] { [] }
 }
 
 public protocol ChatMessageService: Sendable, ObservableObject {

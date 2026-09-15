@@ -16,7 +16,7 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
     @Binding var parentIsExpanded: Bool?
 
     var isHidden: Bool {
-        return (message.text == nil || message.text?.isEmpty ?? false) && message.childChatMessages.isEmpty
+        return (message.text == nil || message.text?.isEmpty ?? false) && message.toolCalls.isEmpty && message.childChatMessages.isEmpty
     }
 
     var body: some View {
@@ -27,6 +27,14 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                     messageView
                 }
                 .buttonStyle(PlainButtonStyle())
+
+                if !message.toolCalls.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(message.toolCalls) { toolCall in
+                            ToolCallView(toolCall: toolCall)
+                        }
+                    }
+                }
 
                 // Child messages
                 if isExpanded {
@@ -46,9 +54,11 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                             .font(.system(size: 12))
                             .foregroundColor(messageColor.opacity(0.7))
                     }
-                    Text(message.text ?? "")
-                        .font(.system(size: 16))
-                        .foregroundColor(messageColor)
+                    if let text = message.text, !text.isEmpty {
+                        Text(text)
+                            .font(.system(size: 16))
+                            .foregroundColor(messageColor)
+                    }
                 }
                 .padding(10)
                 .background(backgroundColor)
