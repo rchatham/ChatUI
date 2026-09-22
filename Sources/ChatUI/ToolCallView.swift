@@ -20,6 +20,9 @@ struct ToolCallView: View {
             } label: {
                 HStack(spacing: 6) {
                     statusIcon
+                    Image(systemName: toolCall.kind.iconName)
+                        .font(.subheadline)
+                        .foregroundStyle(toolCall.kind.iconTint)
                     Text(toolCall.name)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
@@ -37,16 +40,34 @@ struct ToolCallView: View {
 
             if isExpanded {
                 Divider()
+                if let details = toolCall.details, !details.isEmpty {
+                    Text(details)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if let arguments = toolCall.arguments, !arguments.isEmpty {
                     detail(title: "Input", value: arguments)
                 }
                 if let result = toolCall.result, !result.isEmpty {
                     detail(title: toolCall.status == .failure ? "Error" : "Output", value: result)
                 }
+                if !toolCall.children.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(toolCall.children) { child in
+                            ToolCallView(toolCall: child)
+                        }
+                    }
+                    .padding(.leading, 12)
+                    .overlay(
+                        Rectangle().frame(width: 2).foregroundStyle(Color.secondary.opacity(0.2)),
+                        alignment: .leading
+                    )
+                }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Tool \(toolCall.name), \(toolCall.status.label)")
+        .accessibilityLabel("\(toolCall.kind.accessibilityLabel) \(toolCall.name), \(toolCall.status.label)")
     }
 
     @ViewBuilder
@@ -79,34 +100,44 @@ struct ToolCallView: View {
 private extension ChatToolCall.Status {
     var label: String {
         switch self {
-        case .pending:
-            "Running"
-        case .success:
-            "Completed"
-        case .failure:
-            "Failed"
+        case .pending: "Running"
+        case .success: "Completed"
+        case .failure: "Failed"
         }
     }
-
     var symbolName: String {
         switch self {
-        case .pending:
-            "wrench.and.screwdriver"
-        case .success:
-            "checkmark.circle.fill"
-        case .failure:
-            "exclamationmark.triangle.fill"
+        case .pending: "wrench.and.screwdriver"
+        case .success: "checkmark.circle.fill"
+        case .failure: "exclamationmark.triangle.fill"
         }
     }
-
     var tint: Color {
         switch self {
-        case .pending:
-            .secondary
-        case .success:
-            .green
-        case .failure:
-            .red
+        case .pending: .secondary
+        case .success: .green
+        case .failure: .red
+        }
+    }
+}
+
+private extension ChatToolCall.Kind {
+    var iconName: String {
+        switch self {
+        case .tool: "wrench.and.screwdriver"
+        case .agent: "person.crop.circle.badge.checkmark"
+        }
+    }
+    var iconTint: Color {
+        switch self {
+        case .tool: .secondary
+        case .agent: .accentColor
+        }
+    }
+    var accessibilityLabel: String {
+        switch self {
+        case .tool: "Tool"
+        case .agent: "Agent"
         }
     }
 }
