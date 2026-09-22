@@ -37,9 +37,9 @@ public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
     /// The serialized tool input, if available (tools only).
     public let arguments: String?
     /// The execution state.
-    public let status: Status
+    public var status: Status
     /// The serialized tool output or error, if execution has completed.
-    public let result: String?
+    public var result: String?
     /// Agent narrative (e.g. "started: …", "delegated: …") or an error message.
     public var details: String?
     /// Nested sub-tool calls and sub-agent delegations (agents only).
