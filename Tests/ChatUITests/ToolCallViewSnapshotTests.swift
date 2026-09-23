@@ -24,13 +24,14 @@ struct ToolCallViewSnapshotTests {
     }
 
     @Test func renderToolSuccess() async throws {
-        let view = ToolCallView(toolCall: ChatToolCall(id: "t1", name: "calculate", kind: .tool, arguments: #"{"expression":"(2+3)*4"}"#, status: .success, result: "20"))
-        try render(view, name: "tool-success", width: 420)
+        let call = ChatToolCall(id: "t1", name: "calculate", kind: .tool, arguments: #"{"expression":"(2+3)*4"}"#, status: .success, result: "20")
+        try render(ToolCallView(toolCall: call, isExpanded: true), name: "tool-success-expanded", width: 420)
+        try render(ToolCallView(toolCall: call), name: "tool-success-collapsed", width: 420)
     }
 
     @Test func renderToolFailure() async throws {
-        let view = ToolCallView(toolCall: ChatToolCall(id: "t1", name: "calculate", kind: .tool, arguments: #"{"expression":"1/0"}"#, status: .failure, result: "division by zero"))
-        try render(view, name: "tool-failure", width: 420)
+        let call = ChatToolCall(id: "t1", name: "calculate", kind: .tool, arguments: #"{"expression":"1/0"}"#, status: .failure, result: "division by zero")
+        try render(ToolCallView(toolCall: call, isExpanded: true), name: "tool-failure-expanded", width: 420)
     }
 
     @Test func renderAgentWithChildren() async throws {
@@ -41,8 +42,8 @@ struct ToolCallViewSnapshotTests {
                 ChatToolCall(id: "c2", name: "create_event", kind: .tool, arguments: #"{"title":"Lunch"}"#, status: .success, result: "created")
             ]
         )
-        let view = ToolCallView(toolCall: agent)
-        try render(view, name: "agent-with-children", width: 460)
+        let view = ToolCallView(toolCall: agent, isExpanded: true)
+        try render(view, name: "agent-with-children-expanded", width: 460)
     }
 
     @Test func renderAgentDelegation() async throws {
@@ -55,8 +56,8 @@ struct ToolCallViewSnapshotTests {
                               ])
             ]
         )
-        let view = ToolCallView(toolCall: main)
-        try render(view, name: "agent-delegation", width: 480)
+        let view = ToolCallView(toolCall: main, isExpanded: true)
+        try render(view, name: "agent-delegation-expanded", width: 480)
     }
 
     @Test func renderAgentPendingRunningChild() async throws {
@@ -66,8 +67,8 @@ struct ToolCallViewSnapshotTests {
                 ChatToolCall(id: "c1", name: "list_events", kind: .tool, arguments: #"{"calendar":"primary"}"#, status: .pending)
             ]
         )
-        let view = ToolCallView(toolCall: agent)
-        try render(view, name: "agent-pending-running-child", width: 460)
+        let view = ToolCallView(toolCall: agent, isExpanded: true)
+        try render(view, name: "agent-pending-running-child-expanded", width: 460)
     }
 
     @MainActor

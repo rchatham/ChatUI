@@ -27,6 +27,7 @@ struct ToolCallView: View {
                     header
                 }
                 .buttonStyle(.plain)
+                .touchTarget(minHeight: 44)
                 .accessibilityLabel(accessibilityLabel)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
                 .accessibilityHint(isExpanded ? "Collapse details" : "Expand details")
@@ -125,6 +126,20 @@ struct ToolCallView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+private extension View {
+    /// Guarantees a minimum tap target on touch platforms; macOS keeps its
+    /// intrinsic compact layout.
+    @ViewBuilder
+    func touchTarget(minHeight: CGFloat) -> some View {
+        #if os(iOS) || os(watchOS)
+        frame(minHeight: minHeight)
+            .contentShape(Rectangle())
+        #else
+        self
+        #endif
     }
 }
 
