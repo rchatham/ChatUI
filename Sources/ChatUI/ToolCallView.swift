@@ -18,32 +18,25 @@ struct ToolCallView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+            if hasDisclosureContent {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    header
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    statusIcon
-                    Image(systemName: toolCall.kind.iconName)
-                        .font(.subheadline)
-                        .foregroundStyle(toolCall.kind.iconTint)
-                    Text(toolCall.name)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(toolCall.status.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                .accessibilityHint(isExpanded ? "Collapse details" : "Expand details")
+            } else {
+                header
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(accessibilityLabel)
             }
-            .buttonStyle(.plain)
 
-            if isExpanded {
+            if hasDisclosureContent && isExpanded {
                 Divider()
                 if let details = toolCall.details, !details.isEmpty {
                     Text(details)
@@ -51,7 +44,9 @@ struct ToolCallView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if let arguments = toolCall.arguments, !arguments.isEmpty {
+                if toolCall.kind == .tool,
+                   let arguments = toolCall.arguments,
+                   !arguments.isEmpty {
                     detail(title: "Input", value: arguments)
                 }
                 if let result = toolCall.result, !result.isEmpty {
@@ -71,8 +66,39 @@ struct ToolCallView: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(toolCall.kind.accessibilityLabel) \(toolCall.name), \(toolCall.status.label)")
+    }
+
+    private var hasDisclosureContent: Bool {
+        !(toolCall.details?.isEmpty ?? true)
+            || (toolCall.kind == .tool && !(toolCall.arguments?.isEmpty ?? true))
+            || !(toolCall.result?.isEmpty ?? true)
+            || !toolCall.children.isEmpty
+    }
+
+    private var accessibilityLabel: String {
+        "\(toolCall.kind.accessibilityLabel) \(toolCall.name), \(toolCall.status.label)"
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            statusIcon
+            Image(systemName: toolCall.kind.iconName)
+                .font(.subheadline)
+                .foregroundStyle(toolCall.kind.iconTint)
+            Text(toolCall.name)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(toolCall.status.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if hasDisclosureContent {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder
