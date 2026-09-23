@@ -9,7 +9,12 @@ import SwiftUI
 
 struct ToolCallView: View {
     let toolCall: ChatToolCall
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
+
+    init(toolCall: ChatToolCall, isExpanded: Bool = false) {
+        self.toolCall = toolCall
+        self._isExpanded = State(initialValue: isExpanded)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
