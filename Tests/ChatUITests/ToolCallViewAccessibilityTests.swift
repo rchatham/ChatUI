@@ -40,6 +40,85 @@ struct ToolCallViewAccessibilityTests {
         #expect(!elements.contains { $0.accessibleText == "Pending details" })
     }
 
+    @Test func clickingBlankHeaderRegionTogglesDisclosure() throws {
+        let toolCall = ChatToolCall(
+            id: "wide-header",
+            name: "A",
+            status: .success,
+            details: "Expanded details"
+        )
+        let hosted = AccessibilityHost(
+            rootView: ToolCallView(toolCall: toolCall),
+            width: 420,
+            height: 120
+        )
+        defer { hosted.close() }
+
+        try hosted.click(
+            blankRegionOfButton: "Tool A, Completed",
+            waitingForValue: "Expanded"
+        )
+
+        let elements = hosted.elements(waitingFor: "Expanded details")
+        #expect(elements.first { $0.accessibleText == "Tool A, Completed" }?.value as? String == "Expanded")
+    }
+
+    @Test func clickingExpandedNonselectableDetailsCollapsesDisclosure() throws {
+        let toolCall = ChatToolCall(
+            id: "details",
+            name: "Details",
+            status: .success,
+            details: "Tap this nonselectable summary"
+        )
+        let hosted = AccessibilityHost(
+            rootView: ToolCallView(toolCall: toolCall, isExpanded: true),
+            width: 420,
+            height: 160
+        )
+        defer { hosted.close() }
+
+        try hosted.click(
+            elementWithText: "Tap this nonselectable summary",
+            disclosureLabel: "Tool Details, Completed",
+            waitingForValue: "Collapsed"
+        )
+
+        let elements = hosted.elements(waitingForButton: "Tool Details, Completed")
+        #expect(!elements.contains { $0.accessibleText == "Tap this nonselectable summary" })
+    }
+
+    @Test func coordinateClickOnNestedHeaderDoesNotCollapseParent() throws {
+        let parent = ChatToolCall(
+            id: "parent",
+            name: "Parent",
+            kind: .agent,
+            status: .success,
+            children: [
+                ChatToolCall(
+                    id: "child",
+                    name: "Child",
+                    status: .success,
+                    details: "Child details"
+                )
+            ]
+        )
+        let hosted = AccessibilityHost(
+            rootView: ToolCallView(toolCall: parent, isExpanded: true),
+            width: 420,
+            height: 240
+        )
+        defer { hosted.close() }
+
+        try hosted.click(
+            blankRegionOfButton: "Tool Child, Completed",
+            waitingForValue: "Expanded"
+        )
+
+        let elements = hosted.elements(waitingFor: "Child details")
+        #expect(elements.first { $0.accessibleText == "Agent Parent, Completed" }?.value as? String == "Expanded")
+        #expect(elements.first { $0.accessibleText == "Tool Child, Completed" }?.value as? String == "Expanded")
+    }
+
     @Test func standaloneExpandedParentDoesNotAutoExpandPendingChild() throws {
         try expectStandaloneChildCollapsed(status: .pending, statusLabel: "Running")
     }
@@ -487,6 +566,12 @@ private final class AccessibilityHost {
     private let window: NSWindow
 
     init<Content: View>(rootView: Content, width: CGFloat = 520, height: CGFloat) {
+        NSApplication.shared.finishLaunching()
+        let selector = NSSelectorFromString("accessibilitySetEnhancedUserInterfaceAttribute:")
+        if NSApplication.shared.responds(to: selector) {
+            _ = NSApplication.shared.perform(selector, with: NSNumber(value: true))
+        }
+
         host = NSHostingView(rootView: AnyView(rootView.frame(width: width, alignment: .leading)))
         host.frame = NSRect(x: 0, y: 0, width: width, height: height)
         window = NSWindow(
@@ -526,6 +611,44 @@ private final class AccessibilityHost {
         #expect(updatedElements.contains { $0.accessibleText == expectedText })
     }
 
+    func click(blankRegionOfButton label: String, waitingForValue expectedValue: String) throws {
+        let button = try #require(elements(waitingForButton: label).first {
+            $0.role == .button && $0.accessibleText == label
+        })
+        let frame = try #require(accessibilityFrame(of: button.object))
+        #expect(frame.width > 300)
+
+        let screenPoint = NSPoint(x: frame.midX, y: frame.midY)
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        sendMouseEvent(type: .leftMouseDown, at: windowPoint, clickCount: 1)
+        sendMouseEvent(type: .leftMouseUp, at: windowPoint, clickCount: 1)
+
+        let updatedElements = elements { elements in
+            elements.first { $0.accessibleText == label }?.value as? String == expectedValue
+        }
+        #expect(updatedElements.first { $0.accessibleText == label }?.value as? String == expectedValue)
+    }
+
+    func click(
+        elementWithText text: String,
+        disclosureLabel: String,
+        waitingForValue expectedValue: String
+    ) throws {
+        let element = try #require(elements(waitingFor: text).first {
+            $0.accessibleText == text
+        })
+        let frame = try #require(accessibilityFrame(of: element.object))
+        let screenPoint = NSPoint(x: frame.midX, y: frame.midY)
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        sendMouseEvent(type: .leftMouseDown, at: windowPoint, clickCount: 1)
+        sendMouseEvent(type: .leftMouseUp, at: windowPoint, clickCount: 1)
+
+        let updatedElements = elements { elements in
+            elements.first { $0.accessibleText == disclosureLabel }?.value as? String == expectedValue
+        }
+        #expect(updatedElements.first { $0.accessibleText == disclosureLabel }?.value as? String == expectedValue)
+    }
+
     func elements(waitingFor text: String) -> [AccessibilityElement] {
         elements { elements in elements.contains { $0.accessibleText == text } }
     }
@@ -540,6 +663,29 @@ private final class AccessibilityHost {
         let pressSelector = NSSelectorFromString("accessibilityPerformPress")
         #expect(button.object.responds(to: pressSelector))
         _ = button.object.perform(pressSelector)
+    }
+
+    private func accessibilityFrame(of object: NSObject) -> NSRect? {
+        guard object.responds(to: NSSelectorFromString("accessibilityFrame")) else { return nil }
+        return (object.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue
+    }
+
+    private func sendMouseEvent(type: NSEvent.EventType, at point: NSPoint, clickCount: Int) {
+        guard let event = NSEvent.mouseEvent(
+            with: type,
+            location: point,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: clickCount,
+            pressure: type == .leftMouseDown ? 1 : 0
+        ) else {
+            Issue.record("Failed to create mouse event")
+            return
+        }
+        window.sendEvent(event)
     }
 
     private func elements(

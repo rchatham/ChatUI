@@ -77,15 +77,13 @@ struct ToolCallView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if hasDisclosureContent {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        toggleExpansion()
-                    }
-                } label: {
+                Button(action: toggleExpansionWithAnimation) {
                     header
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .disclosureLabelTouchTarget(minHeight: 44)
                 }
                 .buttonStyle(.plain)
-                .touchTarget(minHeight: 44)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier(accessibilityIdentifier)
                 .accessibilityLabel(accessibilityLabel)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
@@ -98,11 +96,13 @@ struct ToolCallView: View {
 
             if hasDisclosureContent && isExpanded {
                 Divider()
+                    .allowsHitTesting(false)
                 if let details = toolCall.details, !details.isEmpty {
                     Text(details)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
                 }
                 if toolCall.kind == .tool,
                    let arguments = toolCall.arguments,
@@ -117,13 +117,27 @@ struct ToolCallView: View {
                     }
                     .padding(.leading, 12)
                     .overlay(
-                        Rectangle().frame(width: 2).foregroundStyle(Color.secondary.opacity(0.2)),
+                        Rectangle()
+                            .frame(width: 2)
+                            .foregroundStyle(Color.secondary.opacity(0.2))
+                            .allowsHitTesting(false),
                         alignment: .leading
                     )
                 }
                 if let result = toolCall.result, !result.isEmpty {
                     detail(title: toolCall.status == .failure ? "Error" : "Output", value: result)
                 }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if hasDisclosureContent && isExpanded {
+                Button(action: toggleExpansionWithAnimation) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
             }
         }
     }
@@ -136,6 +150,12 @@ struct ToolCallView: View {
 
     private var accessibilityIdentifier: String {
         route?.accessibilityIdentifier ?? "tool-call-\(toolCall.id)"
+    }
+
+    private func toggleExpansionWithAnimation() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            toggleExpansion()
+        }
     }
 
     private func toggleExpansion() {
@@ -212,6 +232,7 @@ struct ToolCallView: View {
             Text(title)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
             Text(value)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -222,15 +243,15 @@ struct ToolCallView: View {
 }
 
 private extension View {
-    /// Guarantees a minimum tap target on touch platforms; macOS keeps its
-    /// intrinsic compact layout.
+    /// Keeps the full-width disclosure shape inside the button label and adds
+    /// the minimum touch height only on touch platforms.
     @ViewBuilder
-    func touchTarget(minHeight: CGFloat) -> some View {
+    func disclosureLabelTouchTarget(minHeight: CGFloat) -> some View {
         #if os(iOS) || os(watchOS)
-        frame(minHeight: minHeight)
+        frame(minHeight: minHeight, alignment: .leading)
             .contentShape(Rectangle())
         #else
-        self
+        contentShape(Rectangle())
         #endif
     }
 }
