@@ -68,7 +68,11 @@ public struct ChatView<MessageService: ChatMessageService>: View {
 
     @ViewBuilder
     var messageList: some View {
-        MessageListView(viewModel: viewModel.messageListViewModel(), supplementaryContent: _supplementaryContent)
+        MessageListView(
+            viewModel: viewModel.messageListViewModel(),
+            composerViewModel: viewModel.messageComposerViewModel(voiceInputHandler: voiceInputHandler),
+            supplementaryContent: _supplementaryContent
+        )
     }
 
     @ViewBuilder

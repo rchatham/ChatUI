@@ -56,17 +56,23 @@ struct MessageComposerView: View {
             VStack(spacing: 0) {
                 Divider()
                 HStack(spacing: 12) {
-                // Microphone button on left (only when NOT replacing send button)
-                if let voiceHandler = viewModel.voiceInputHandler,
-                   voiceHandler.isEnabled,
-                   !voiceHandler.replaceSendButton {
+                // Keep the microphone in its configured position. While responding,
+                // a right-side microphone yields its space to Stop rather than moving.
+                if shouldShowLeadingMicrophone,
+                   let voiceHandler = viewModel.voiceInputHandler {
                     microphoneButton(handler: voiceHandler)
                         .padding(.leading, 4)
                 }
 
                 textInputField
 
-                if viewModel.isMessageSending || isProcessing {
+                if viewModel.sendState == .streaming {
+                    operationButton
+                        .padding(.trailing, 4)
+                        .transition(.opacity)
+                } else if viewModel.sendState == .establishing ||
+                            viewModel.sendState == .stopping ||
+                            isProcessing {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                         .padding(.trailing, 4)
@@ -134,25 +140,39 @@ struct MessageComposerView: View {
         .onChange(of: viewModel.voiceInputHandler?.pendingTranscribedText) { _, _ in
             consumePendingText()
         }
+        .onChange(of: viewModel.sendState) { _, state in
+            // A disabled TextField cannot retain first responder during establishment.
+            // Focus as soon as editing is available, not when generation finishes.
+            if state == .streaming {
+                promptTextFieldIsActive = true
+            }
+        }
     }
 
     /// Consume pending transcribed text from voice handler and set to input field
     /// This runs AFTER view renders to avoid race condition with @Published
     private func consumePendingText() {
-        guard let handler = viewModel.voiceInputHandler,
-              let pending = handler.pendingTranscribedText,
-              !pending.isEmpty else { return }
+        guard let pending = viewModel.consumePendingVoiceText() else { return }
 
         print("[MessageComposerView] Consuming pending text via .onAppear/.onChange: '\(pending)'")
         // Set LOCAL state first - this reliably updates TextField
         localInput = pending
-        // Also sync to viewModel for message sending
-        viewModel.input = pending
-        handler.pendingTranscribedText = nil
+    }
+
+    private var editableInput: Binding<String> {
+        Binding(
+            get: { localInput },
+            set: { newValue in
+                // Keep the field focused after submission, but reject edits until
+                // the provider has established the response stream.
+                guard !viewModel.isComposerEditingDisabled else { return }
+                localInput = newValue
+            }
+        )
     }
 
     var textInputField: some View {
-        TextField("Enter your prompt", text: $localInput, axis: .vertical)
+        TextField("Enter your prompt", text: editableInput, axis: .vertical)
             .id(textFieldId) // Force TextField recreation when id changes to sync with binding
             .accessibilityIdentifier("chat.promptInput")
             .textFieldStyle(.plain)
@@ -162,10 +182,33 @@ struct MessageComposerView: View {
             .multilineTextAlignment(.leading)
             .onKeyPress(keys: .init([.return]), action: handleEnterPress)
             .focused($promptTextFieldIsActive)
-            .disabled(viewModel.isMessageSending || viewModel.voiceInputHandler?.isProcessing ?? false)
+            .disabled(viewModel.voiceInputHandler?.isProcessing == true)
             .onChange(of: localInput) { _, newValue in
                 viewModel.input = newValue  // Sync local → viewModel
             }
+    }
+
+    var shouldShowLeadingMicrophone: Bool {
+        guard let voiceHandler = viewModel.voiceInputHandler,
+              voiceHandler.isEnabled else { return false }
+        return !voiceHandler.replaceSendButton
+    }
+
+    var operationButton: some View {
+        Button(action: viewModel.stopSending) {
+            if viewModel.sendState == .stopping {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.accentColor)
+            }
+        }
+        .accessibilityIdentifier("chat.stopButton")
+        .buttonStyle(BorderlessButtonStyle())
+        .accessibilityLabel("Stop")
+        .disabled(viewModel.sendState == .stopping)
     }
 
     var sendButton: some View {
@@ -181,7 +224,10 @@ struct MessageComposerView: View {
         .accessibilityIdentifier("chat.sendButton")
         .buttonStyle(BorderlessButtonStyle())
         .accessibilityLabel("Send")
-        .disabled(localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(
+            viewModel.isMessageSending ||
+            localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        )
     }
 
     private func microphoneButton(handler: any VoiceInputHandler) -> some View {
@@ -207,7 +253,7 @@ struct MessageComposerView: View {
             .frame(width: 32, height: 32)
         }
         .buttonStyle(BorderlessButtonStyle())
-        .disabled(handler.isProcessing || viewModel.isMessageSending)
+        .disabled(handler.isProcessing || viewModel.isComposerEditingDisabled)
     }
 
     @MainActor
@@ -228,15 +274,14 @@ struct MessageComposerView: View {
                 print("[MessageComposerView] Got transcribed text: '\(text)'")
                 localInput = text
                 viewModel.input = text
-            } else if let pending = handler.pendingTranscribedText, !pending.isEmpty {
+                handler.pendingTranscribedText = nil
+            } else if let pending = viewModel.consumePendingVoiceText() {
                 print("[MessageComposerView] Using pending text: '\(pending)'")
                 localInput = pending
-                viewModel.input = pending
             } else {
                 print("[MessageComposerView] No transcribed text available")
+                handler.pendingTranscribedText = nil
             }
-            // Clear pending to avoid double-consumption
-            handler.pendingTranscribedText = nil
 
             // Restore focus after a brief delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -361,6 +406,7 @@ struct MessageComposerView: View {
     }
 
     private func handleEnterPress(with press: KeyPress) -> KeyPress.Result {
+        guard !viewModel.isComposerEditingDisabled else { return .handled }
         if press.modifiers.contains(.shift) {
             // Insert a new line when Shift+Enter is pressed
             Task { @MainActor in
@@ -375,29 +421,40 @@ struct MessageComposerView: View {
     }
 
     func submitButtonTapped() {
-        if viewModel.isMessageSending || localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
+        let sentText = localInput
+        guard !viewModel.isMessageSending,
+              !sentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return }
 
-
-        Task {
-            // Ensure viewModel.input is synced before sending (localInput may not have triggered onChange yet)
-            viewModel.input = localInput
-
-            await viewModel.sendMessage()
-            promptTextFieldIsActive = true
-        }
+        // Clear and append the transcript synchronously. Editing unlocks once the
+        // response stream is established, so subsequent input becomes the next draft.
+        localInput = ""
+        viewModel.input = ""
+        promptTextFieldIsActive = true
+        _ = viewModel.startSending(sentText)
     }
 }
 
 extension MessageComposerView {
     @MainActor class ViewModel: ObservableObject {
-        @Published var input: String = ""
+        enum SendState: Equatable {
+            case idle
+            case establishing
+            case streaming
+            case stopping
+        }
 
+        @Published var input: String = ""
         @Published var showAlert: Bool = false
         @Published var alertInfo: ChatAlertInfo?
         @Published var showError: Bool = false
-        @Published var isMessageSending: Bool = false
+        @Published private(set) var sendState: SendState = .idle
 
-        nonisolated private let messageService: any ChatMessageService
+        var isMessageSending: Bool { sendState != .idle }
+        var isComposerEditingDisabled: Bool { sendState == .establishing }
+
+        private let messageService: any ChatMessageService
+        private var activeOperation: ChatSendOperation?
         @Published var voiceInputHandler: (any VoiceInputHandler)?
 
         init(messageService: any ChatMessageService, voiceInputHandler: (any VoiceInputHandler)? = nil) {
@@ -405,19 +462,89 @@ extension MessageComposerView {
             self.voiceInputHandler = voiceInputHandler
         }
 
-        func sendMessage() async {
-            guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            // Send the message completion request
-            isMessageSending = true
-            let sentText = input
-            // Clear the input field
-            Task { @MainActor in input = "" }
-            do { try await messageService.send(message: sentText, stream: true) }
-            catch {
-                handleError(error)
-                Task { @MainActor in input = sentText }
+        func sendMessage(_ message: String? = nil) async {
+            let sentText = message ?? input
+            if message == nil,
+               sendState == .idle,
+               !sentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                input = ""
             }
-            isMessageSending = false
+            guard let sendTask = startSending(sentText) else { return }
+            await sendTask.value
+        }
+
+        @discardableResult
+        func consumePendingVoiceText() -> String? {
+            guard let handler = voiceInputHandler,
+                  let pending = handler.pendingTranscribedText,
+                  !pending.isEmpty else { return nil }
+
+            input = pending
+            handler.pendingTranscribedText = nil
+            return pending
+        }
+
+        @discardableResult
+        func startSending(_ message: String) -> Task<Void, Never>? {
+            guard sendState == .idle,
+                  !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+
+            let operation = messageService.sendOperation(message: message, stream: true)
+            activeOperation = operation
+            sendState = .establishing
+            return Task { await monitor(operation) }
+        }
+
+        func retry(messageID: UUID) async {
+            guard sendState == .idle else { return }
+            do {
+                let operation = try messageService.retryOperation(messageID: messageID, stream: true)
+                await run(operation)
+            } catch {
+                handleError(error)
+            }
+        }
+
+        func stopSending() {
+            guard let activeOperation, sendState == .streaming else { return }
+            sendState = .stopping
+            if let messageID = activeOperation.messageID {
+                messageService.markResponseStopped(messageID: messageID)
+            }
+            activeOperation.cancel()
+        }
+
+        private func run(_ operation: ChatSendOperation) async {
+            activeOperation = operation
+            sendState = .establishing
+            await monitor(operation)
+        }
+
+        private func monitor(_ operation: ChatSendOperation) async {
+            defer {
+                if activeOperation?.id == operation.id {
+                    activeOperation = nil
+                    sendState = .idle
+                }
+            }
+
+            do {
+                try await operation.waitUntilEstablished()
+                if activeOperation?.id == operation.id, sendState != .stopping {
+                    sendState = .streaming
+                }
+                try await operation.waitForCompletion()
+            } catch is CancellationError {
+                // Stop is an expected terminal state; retain any partial response.
+            } catch {
+                let hasInlineFailure = operation.messageID.flatMap { messageID in
+                    messageService.chatMessages.first(where: { $0.uuid == messageID })?.sendFailure
+                } != nil
+                if !hasInlineFailure {
+                    handleError(error)
+                }
+            }
         }
 
         func handleError(_ error: any Error) {

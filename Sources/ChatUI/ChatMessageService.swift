@@ -81,6 +81,52 @@ public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
     }
 }
 
+public struct ChatSendFailure: Sendable, Equatable {
+    public let message: String
+
+    public init(message: String) {
+        self.message = message
+    }
+}
+
+public struct ChatSendOperation: Sendable {
+    public let id: UUID
+    public let messageID: UUID?
+    private let establishment: Task<Void, any Error>
+    private let completion: Task<Void, any Error>
+    private let cancelAction: @Sendable () -> Void
+
+    public init(
+        id: UUID = UUID(),
+        messageID: UUID? = nil,
+        establishment: Task<Void, any Error>,
+        completion: Task<Void, any Error>,
+        cancel: @escaping @Sendable () -> Void
+    ) {
+        self.id = id
+        self.messageID = messageID
+        self.establishment = establishment
+        self.completion = completion
+        self.cancelAction = cancel
+    }
+
+    public func waitUntilEstablished() async throws {
+        try await establishment.value
+    }
+
+    public func waitForCompletion() async throws {
+        try await completion.value
+    }
+
+    public func cancel() {
+        cancelAction()
+    }
+}
+
+public enum ChatMessageServiceError: Error, Equatable {
+    case retryUnsupported
+}
+
 public protocol ChatMessageInfo: Sendable, ObservableObject, Identifiable, Hashable where ID == UUID {
     var uuid: UUID { get }
     var text: String? { get }
@@ -92,19 +138,51 @@ public protocol ChatMessageInfo: Sendable, ObservableObject, Identifiable, Hasha
     var isUser: Bool { get }
     var isAssistant: Bool { get }
     var isAgentEvent: Bool { get }
+    /// A transient failure for the send initiated by this message.
+    var sendFailure: ChatSendFailure? { get }
+    /// Whether the user explicitly stopped the response to this message.
+    var wasResponseStopped: Bool { get }
+    /// The prompt that produced this assistant or agent message, when known.
+    var responseToMessageID: UUID? { get }
 }
 
 public extension ChatMessageInfo {
     /// Existing message models without tool activity continue to render normally.
     var toolCalls: [ChatToolCall] { [] }
+    /// Existing message models do not need to support inline send failures.
+    var sendFailure: ChatSendFailure? { nil }
+    var wasResponseStopped: Bool { false }
+    var responseToMessageID: UUID? { nil }
 }
 
 public protocol ChatMessageService: Sendable, ObservableObject {
     associatedtype ChatMessage: ChatMessageInfo
     var chatMessages: [ChatMessage] { get }
     func send(message: String, stream: Bool) async throws
+    @MainActor func sendOperation(message: String, stream: Bool) -> ChatSendOperation
+    @MainActor func retryOperation(messageID: UUID, stream: Bool) throws -> ChatSendOperation
+    @MainActor func markResponseStopped(messageID: UUID)
     func handleError(error: Error) -> ChatAlertInfo?
     func deleteMessage(id: UUID)
+}
+
+public extension ChatMessageService {
+    /// Adapts legacy services to operation-based sending without requiring source changes.
+    func sendOperation(message: String, stream: Bool) -> ChatSendOperation {
+        let establishment = Task<Void, any Error> {}
+        let completion = Task { try await send(message: message, stream: stream) }
+        return ChatSendOperation(
+            establishment: establishment,
+            completion: completion,
+            cancel: { completion.cancel() }
+        )
+    }
+
+    func retryOperation(messageID: UUID, stream: Bool) throws -> ChatSendOperation {
+        throw ChatMessageServiceError.retryUnsupported
+    }
+
+    func markResponseStopped(messageID: UUID) {}
 }
 
 public struct ChatAlertInfo {
