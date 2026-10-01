@@ -50,13 +50,13 @@ struct ToolCallView: View {
                    !arguments.isEmpty {
                     detail(title: "Input", value: arguments)
                 }
-                if let result = toolCall.result, !result.isEmpty {
-                    detail(title: toolCall.status == .failure ? "Error" : "Output", value: result)
-                }
                 if !toolCall.children.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(toolCall.children) { child in
-                            ToolCallView(toolCall: child)
+                            ToolCallView(
+                                toolCall: child,
+                                isExpanded: child.status == .pending || !child.children.isEmpty
+                            )
                         }
                     }
                     .padding(.leading, 12)
@@ -64,6 +64,9 @@ struct ToolCallView: View {
                         Rectangle().frame(width: 2).foregroundStyle(Color.secondary.opacity(0.2)),
                         alignment: .leading
                     )
+                }
+                if let result = toolCall.result, !result.isEmpty {
+                    detail(title: toolCall.status == .failure ? "Error" : "Output", value: result)
                 }
             }
         }

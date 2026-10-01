@@ -84,6 +84,52 @@ struct ToolCallViewAccessibilityTests {
         #expect(contentlessChild?.help != "Expand details")
     }
 
+    @Test func nestedActivityPrecedesParentOutput() throws {
+        NSApplication.shared.finishLaunching()
+        enableInProcessAccessibilityHierarchy()
+
+        let parentResult = "Parent final result"
+        let parent = ChatToolCall(
+            id: "parent",
+            name: "Coordinator",
+            kind: .agent,
+            status: .success,
+            result: parentResult,
+            children: [
+                ChatToolCall(
+                    id: "delegate",
+                    name: "Research",
+                    kind: .agent,
+                    status: .success,
+                    children: [
+                        ChatToolCall(
+                            id: "grandchild",
+                            name: "Search",
+                            kind: .tool,
+                            arguments: #"{"query":"chronology"}"#,
+                            status: .success,
+                            result: "source"
+                        )
+                    ]
+                )
+            ]
+        )
+        let elements = renderedAccessibilityElements(
+            for: parent,
+            waitingFor: parentResult,
+            height: 420
+        )
+        let texts = elements.compactMap(\.accessibleText)
+        let delegateIndex = try #require(texts.firstIndex(of: "Agent Research, Completed"))
+        let grandchildIndex = try #require(texts.firstIndex(of: "Tool Search, Completed"))
+        let outputIndex = try #require(texts.firstIndex(of: "Output"))
+        let resultIndex = try #require(texts.firstIndex(of: parentResult))
+
+        #expect(delegateIndex < grandchildIndex)
+        #expect(grandchildIndex < outputIndex)
+        #expect(outputIndex < resultIndex)
+    }
+
     @Test func agentArgumentsDoNotRenderInputWhileToolArgumentsDo() {
         NSApplication.shared.finishLaunching()
         enableInProcessAccessibilityHierarchy()
@@ -139,13 +185,14 @@ struct ToolCallViewAccessibilityTests {
 
     private func renderedAccessibilityElements(
         for toolCall: ChatToolCall,
-        waitingFor expectedText: String
+        waitingFor expectedText: String,
+        height: CGFloat = 240
     ) -> [AccessibilityElement] {
         let host = NSHostingView(
             rootView: ToolCallView(toolCall: toolCall, isExpanded: true)
                 .frame(width: 420, alignment: .leading)
         )
-        host.frame = NSRect(x: 0, y: 0, width: 420, height: 240)
+        host.frame = NSRect(x: 0, y: 0, width: 420, height: height)
 
         let window = NSWindow(
             contentRect: host.frame,

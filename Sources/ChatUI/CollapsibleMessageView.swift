@@ -31,7 +31,10 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                 if !message.toolCalls.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(message.toolCalls) { toolCall in
-                            ToolCallView(toolCall: toolCall)
+                            ToolCallView(
+                                toolCall: toolCall,
+                                isExpanded: toolCall.status == .pending
+                            )
                         }
                     }
                 }

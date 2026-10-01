@@ -48,7 +48,7 @@ struct ToolCallViewSnapshotTests {
 
     @Test func renderAgentDelegation() async throws {
         let main = ChatToolCall(
-            id: "m1", name: "Main", kind: .agent, status: .success, details: "started: plan the trip",
+            id: "m1", name: "Main", kind: .agent, status: .success, result: "Trip plan complete", details: "started: plan the trip",
             children: [
                 ChatToolCall(id: "d1", name: "Research", kind: .agent, status: .success, details: "delegated: find flights",
                               children: [
@@ -60,15 +60,30 @@ struct ToolCallViewSnapshotTests {
         try render(view, name: "agent-delegation-expanded", width: 480)
     }
 
-    @Test func renderAgentPendingRunningChild() async throws {
+    @Test func renderAgentPendingNestedDelegation() async throws {
         let agent = ChatToolCall(
-            id: "a1", name: "CalendarAgent", kind: .agent, status: .pending, details: "started: list events",
+            id: "a1", name: "Main", kind: .agent, status: .pending, details: "started: research the request",
             children: [
-                ChatToolCall(id: "c1", name: "list_events", kind: .tool, arguments: #"{"calendar":"primary"}"#, status: .pending)
+                ChatToolCall(
+                    id: "d1",
+                    name: "Research",
+                    kind: .agent,
+                    status: .pending,
+                    details: "delegated: find current sources",
+                    children: [
+                        ChatToolCall(
+                            id: "c1",
+                            name: "search",
+                            kind: .tool,
+                            arguments: #"{"query":"current sources"}"#,
+                            status: .pending
+                        )
+                    ]
+                )
             ]
         )
         let view = ToolCallView(toolCall: agent, isExpanded: true)
-        try render(view, name: "agent-pending-running-child-expanded", width: 460)
+        try render(view, name: "agent-pending-nested-delegation-expanded", width: 460)
     }
 
     @MainActor
