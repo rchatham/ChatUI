@@ -8,6 +8,7 @@ import SwiftUI
 
 struct MessageListView<MessageService: ChatMessageService>: View {
     @StateObject var viewModel: ViewModel
+    @State private var expandedToolCallRoute: ToolCallExpansionRoute?
     var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
 
     var body: some View {
@@ -16,7 +17,11 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                 LazyVStack(alignment: .leading) {
                     ForEach(viewModel.messageService.chatMessages, id: \.uuid) { message in
                         VStack(alignment: .leading, spacing: 4) {
-                            CollapsibleMessageView(message: message, parentIsExpanded: .constant(false))
+                            CollapsibleMessageView(
+                                message: message,
+                                parentIsExpanded: .constant(false),
+                                expandedToolCallRoute: $expandedToolCallRoute
+                            )
                             if let supplementary = supplementaryContent?(message) {
                                 supplementary
                             }

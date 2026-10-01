@@ -7,13 +7,71 @@
 
 import SwiftUI
 
+struct ToolCallExpansionRoute: Hashable {
+    struct Segment: Hashable {
+        let index: Int
+        let id: String
+    }
+
+    let messageID: UUID
+    let segments: [Segment]
+
+    init(messageID: UUID, index: Int, toolCallID: String) {
+        self.messageID = messageID
+        self.segments = [Segment(index: index, id: toolCallID)]
+    }
+
+    private init(messageID: UUID, segments: [Segment]) {
+        self.messageID = messageID
+        self.segments = segments
+    }
+
+    func appending(index: Int, toolCallID: String) -> ToolCallExpansionRoute {
+        ToolCallExpansionRoute(
+            messageID: messageID,
+            segments: segments + [Segment(index: index, id: toolCallID)]
+        )
+    }
+
+    var parent: ToolCallExpansionRoute? {
+        guard segments.count > 1 else { return nil }
+        return ToolCallExpansionRoute(messageID: messageID, segments: Array(segments.dropLast()))
+    }
+
+    func contains(_ route: ToolCallExpansionRoute) -> Bool {
+        messageID == route.messageID
+            && segments.count <= route.segments.count
+            && zip(segments, route.segments).allSatisfy(==)
+    }
+
+    var accessibilityIdentifier: String {
+        let path = segments.map { "\($0.index)-\($0.id)" }.joined(separator: "/")
+        return "tool-call-\(messageID.uuidString)-\(path)"
+    }
+}
+
 struct ToolCallView: View {
     let toolCall: ChatToolCall
-    @State private var isExpanded: Bool
+    @State private var standaloneIsExpanded: Bool
+    private let route: ToolCallExpansionRoute?
+    private let expandedRoute: Binding<ToolCallExpansionRoute?>?
 
     init(toolCall: ChatToolCall, isExpanded: Bool = false) {
         self.toolCall = toolCall
-        self._isExpanded = State(initialValue: isExpanded)
+        self._standaloneIsExpanded = State(initialValue: isExpanded)
+        self.route = nil
+        self.expandedRoute = nil
+    }
+
+    init(
+        toolCall: ChatToolCall,
+        route: ToolCallExpansionRoute,
+        expandedRoute: Binding<ToolCallExpansionRoute?>
+    ) {
+        self.toolCall = toolCall
+        self._standaloneIsExpanded = State(initialValue: false)
+        self.route = route
+        self.expandedRoute = expandedRoute
     }
 
     var body: some View {
@@ -21,13 +79,14 @@ struct ToolCallView: View {
             if hasDisclosureContent {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
+                        toggleExpansion()
                     }
                 } label: {
                     header
                 }
                 .buttonStyle(.plain)
                 .touchTarget(minHeight: 44)
+                .accessibilityIdentifier(accessibilityIdentifier)
                 .accessibilityLabel(accessibilityLabel)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
                 .accessibilityHint(isExpanded ? "Collapse details" : "Expand details")
@@ -52,11 +111,8 @@ struct ToolCallView: View {
                 }
                 if !toolCall.children.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(toolCall.children) { child in
-                            ToolCallView(
-                                toolCall: child,
-                                isExpanded: child.status == .pending || !child.children.isEmpty
-                            )
+                        ForEach(Array(toolCall.children.enumerated()), id: \.offset) { index, child in
+                            childView(child, index: index)
                         }
                     }
                     .padding(.leading, 12)
@@ -69,6 +125,38 @@ struct ToolCallView: View {
                     detail(title: toolCall.status == .failure ? "Error" : "Output", value: result)
                 }
             }
+        }
+    }
+
+    private var isExpanded: Bool {
+        guard let route, let expandedRoute else { return standaloneIsExpanded }
+        guard let currentRoute = expandedRoute.wrappedValue else { return false }
+        return route.contains(currentRoute)
+    }
+
+    private var accessibilityIdentifier: String {
+        route?.accessibilityIdentifier ?? "tool-call-\(toolCall.id)"
+    }
+
+    private func toggleExpansion() {
+        guard let route, let expandedRoute else {
+            standaloneIsExpanded.toggle()
+            return
+        }
+
+        expandedRoute.wrappedValue = isExpanded ? route.parent : route
+    }
+
+    @ViewBuilder
+    private func childView(_ child: ChatToolCall, index: Int) -> some View {
+        if let route, let expandedRoute {
+            ToolCallView(
+                toolCall: child,
+                route: route.appending(index: index, toolCallID: child.id),
+                expandedRoute: expandedRoute
+            )
+        } else {
+            ToolCallView(toolCall: child)
         }
     }
 
@@ -86,6 +174,7 @@ struct ToolCallView: View {
     private var header: some View {
         HStack(spacing: 6) {
             statusIcon
+                .accessibilityHidden(true)
             Image(systemName: toolCall.kind.iconName)
                 .font(.subheadline)
                 .foregroundStyle(toolCall.kind.iconTint)

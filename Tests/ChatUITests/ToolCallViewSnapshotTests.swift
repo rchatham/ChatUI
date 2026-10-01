@@ -5,6 +5,7 @@
 //  Renders ToolCallView in representative states to PNG files for visual review.
 //
 
+import Combine
 import SwiftUI
 import Testing
 @testable import ChatUI
@@ -60,6 +61,53 @@ struct ToolCallViewSnapshotTests {
         try render(view, name: "agent-delegation-expanded", width: 480)
     }
 
+    @Test func renderPendingNestedDelegationCollapsed() async throws {
+        let agent = ChatToolCall(
+            id: "a1",
+            name: "Main",
+            kind: .agent,
+            status: .pending,
+            details: "started: research the request",
+            children: [
+                ChatToolCall(
+                    id: "d1",
+                    name: "Research",
+                    kind: .agent,
+                    status: .pending,
+                    details: "delegated: find current sources"
+                )
+            ]
+        )
+        try render(
+            ToolCallView(toolCall: agent, isExpanded: false),
+            name: "pending-nested-delegation-collapsed",
+            width: 460
+        )
+    }
+
+    @Test func renderToolOnlyAndNormalAssistantMessages() async throws {
+        let toolOnly = SnapshotMessage(
+            uuid: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
+            toolCalls: [
+                ChatToolCall(
+                    id: "search",
+                    name: "Search",
+                    status: .pending,
+                    details: "Searching synthetic sources"
+                )
+            ]
+        )
+        let normalAssistant = SnapshotMessage(
+            uuid: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
+            text: "Synthetic assistant response"
+        )
+        let view = VStack(alignment: .leading, spacing: 12) {
+            CollapsibleMessageView(message: toolOnly, parentIsExpanded: .constant(false))
+            CollapsibleMessageView(message: normalAssistant, parentIsExpanded: .constant(false))
+        }
+        try render(view, name: "tool-only-and-normal-assistant-messages", width: 460)
+    }
+
     @Test func renderAgentPendingNestedDelegation() async throws {
         let agent = ChatToolCall(
             id: "a1", name: "Main", kind: .agent, status: .pending, details: "started: research the request",
@@ -87,7 +135,7 @@ struct ToolCallViewSnapshotTests {
     }
 
     @MainActor
-    private func render(_ view: ToolCallView, name: String, width: CGFloat) throws {
+    private func render<Content: View>(_ view: Content, name: String, width: CGFloat) throws {
         let host = view
             .frame(width: width, alignment: .leading)
             .padding(16)
@@ -108,6 +156,39 @@ struct ToolCallViewSnapshotTests {
         #else
         Issue.record("Screenshot rendering requires macOS/AppKit host")
         #endif
+    }
+}
+
+private final class SnapshotMessage: ChatMessageInfo, @unchecked Sendable {
+    let uuid: UUID
+    let id: UUID
+    let text: String?
+    let toolCalls: [ChatToolCall]
+    let childChatMessages: [SnapshotMessage]
+    let isUser = false
+    let isAssistant = true
+    let isAgentEvent = false
+    let objectWillChange = ObservableObjectPublisher()
+
+    init(
+        uuid: UUID = UUID(),
+        text: String? = nil,
+        toolCalls: [ChatToolCall] = [],
+        children: [SnapshotMessage] = []
+    ) {
+        self.uuid = uuid
+        self.id = uuid
+        self.text = text
+        self.toolCalls = toolCalls
+        self.childChatMessages = children
+    }
+
+    static func == (lhs: SnapshotMessage, rhs: SnapshotMessage) -> Bool {
+        lhs.uuid == rhs.uuid
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(uuid)
     }
 }
 
