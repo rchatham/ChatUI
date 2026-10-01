@@ -49,7 +49,7 @@ struct ToolCallViewSnapshotTests {
 
     @Test func renderAgentDelegation() async throws {
         let main = ChatToolCall(
-            id: "m1", name: "Main", kind: .agent, status: .success, details: "started: plan the trip",
+            id: "m1", name: "Main", kind: .agent, status: .success, result: "Trip plan complete", details: "started: plan the trip",
             children: [
                 ChatToolCall(id: "d1", name: "Research", kind: .agent, status: .success, details: "delegated: find flights",
                               children: [
@@ -61,15 +61,79 @@ struct ToolCallViewSnapshotTests {
         try render(view, name: "agent-delegation-expanded", width: 480)
     }
 
-    @Test func renderAgentPendingRunningChild() async throws {
+    @Test func renderPendingNestedDelegationCollapsed() async throws {
         let agent = ChatToolCall(
-            id: "a1", name: "CalendarAgent", kind: .agent, status: .pending, details: "started: list events",
+            id: "a1",
+            name: "Main",
+            kind: .agent,
+            status: .pending,
+            details: "started: research the request",
             children: [
-                ChatToolCall(id: "c1", name: "list_events", kind: .tool, arguments: #"{"calendar":"primary"}"#, status: .pending)
+                ChatToolCall(
+                    id: "d1",
+                    name: "Research",
+                    kind: .agent,
+                    status: .pending,
+                    details: "delegated: find current sources"
+                )
+            ]
+        )
+        try render(
+            ToolCallView(toolCall: agent, isExpanded: false),
+            name: "pending-nested-delegation-collapsed",
+            width: 460
+        )
+    }
+
+    @Test func renderToolOnlyAndNormalAssistantMessages() async throws {
+        let toolOnly = SnapshotMessage(
+            uuid: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
+            toolCalls: [
+                ChatToolCall(
+                    id: "search",
+                    name: "Search",
+                    status: .pending,
+                    details: "Searching synthetic sources"
+                )
+            ],
+            isUser: false
+        )
+        let normalAssistant = SnapshotMessage(
+            uuid: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
+            text: "Synthetic assistant response",
+            isUser: false
+        )
+        let view = VStack(alignment: .leading, spacing: 12) {
+            CollapsibleMessageView(message: toolOnly, parentIsExpanded: .constant(false))
+            CollapsibleMessageView(message: normalAssistant, parentIsExpanded: .constant(false))
+        }
+        try render(view, name: "tool-only-and-normal-assistant-messages", width: 460)
+    }
+
+    @Test func renderAgentPendingNestedDelegation() async throws {
+        let agent = ChatToolCall(
+            id: "a1", name: "Main", kind: .agent, status: .pending, details: "started: research the request",
+            children: [
+                ChatToolCall(
+                    id: "d1",
+                    name: "Research",
+                    kind: .agent,
+                    status: .pending,
+                    details: "delegated: find current sources",
+                    children: [
+                        ChatToolCall(
+                            id: "c1",
+                            name: "search",
+                            kind: .tool,
+                            arguments: #"{"query":"current sources"}"#,
+                            status: .pending
+                        )
+                    ]
+                )
             ]
         )
         let view = ToolCallView(toolCall: agent, isExpanded: true)
-        try render(view, name: "agent-pending-running-child-expanded", width: 460)
+        try render(view, name: "agent-pending-nested-delegation-expanded", width: 460)
     }
 
     @Test func renderStoppedResponseNotice() throws {
@@ -212,10 +276,11 @@ private final class SnapshotMessageService: ChatMessageService, @unchecked Senda
 }
 
 private final class SnapshotMessage: ChatMessageInfo, @unchecked Sendable {
-    let uuid = UUID()
+    let uuid: UUID
     var id: UUID { uuid }
     @Published var text: String?
-    let childChatMessages: [SnapshotMessage] = []
+    let toolCalls: [ChatToolCall]
+    let childChatMessages: [SnapshotMessage]
     let isUser: Bool
     let isAssistant: Bool
     var isAgentEvent: Bool { !isUser && !isAssistant }
@@ -223,8 +288,19 @@ private final class SnapshotMessage: ChatMessageInfo, @unchecked Sendable {
     @Published var sendFailure: ChatSendFailure?
     @Published var wasResponseStopped = false
 
-    init(text: String?, isUser: Bool = true, isAssistant: Bool? = nil, responseToMessageID: UUID? = nil) {
+    init(
+        uuid: UUID = UUID(),
+        text: String? = nil,
+        toolCalls: [ChatToolCall] = [],
+        children: [SnapshotMessage] = [],
+        isUser: Bool = true,
+        isAssistant: Bool? = nil,
+        responseToMessageID: UUID? = nil
+    ) {
+        self.uuid = uuid
         self.text = text
+        self.toolCalls = toolCalls
+        self.childChatMessages = children
         self.isUser = isUser
         self.isAssistant = isAssistant ?? !isUser
         self.responseToMessageID = responseToMessageID
