@@ -5,6 +5,7 @@
 //  Renders ToolCallView in representative states to PNG files for visual review.
 //
 
+import Combine
 import SwiftUI
 import Testing
 @testable import ChatUI
@@ -71,8 +72,34 @@ struct ToolCallViewSnapshotTests {
         try render(view, name: "agent-pending-running-child-expanded", width: 460)
     }
 
+    @Test func renderStoppedResponseNotice() throws {
+        let message = SnapshotMessage(text: "Book the afternoon flight")
+        message.wasResponseStopped = true
+        let service = SnapshotMessageService(message: message)
+        let view = MessageListRow(
+            message: message,
+            composerViewModel: MessageComposerView.ViewModel(messageService: service),
+            supplementaryContent: { _ in nil }
+        )
+        try render(view, name: "stopped-response-notice", width: 460)
+    }
+
+    @Test func renderFailedMessageRetry() throws {
+        let message = SnapshotMessage(text: "Book the afternoon flight")
+        message.sendFailure = ChatSendFailure(message: "The connection was interrupted.")
+        let service = SnapshotMessageService(message: message)
+        let composerViewModel = MessageComposerView.ViewModel(messageService: service)
+        let view = MessageListRow(
+            message: message,
+            composerViewModel: composerViewModel,
+            supplementaryContent: { _ in nil }
+        )
+
+        try render(view, name: "failed-message-retry", width: 460)
+    }
+
     @MainActor
-    private func render(_ view: ToolCallView, name: String, width: CGFloat) throws {
+    private func render<Content: View>(_ view: Content, name: String, width: CGFloat) throws {
         let host = view
             .frame(width: width, alignment: .leading)
             .padding(16)
@@ -93,6 +120,42 @@ struct ToolCallViewSnapshotTests {
         #else
         Issue.record("Screenshot rendering requires macOS/AppKit host")
         #endif
+    }
+}
+
+private final class SnapshotMessageService: ChatMessageService, @unchecked Sendable {
+    @Published private(set) var chatMessages: [SnapshotMessage]
+
+    init(message: SnapshotMessage) {
+        chatMessages = [message]
+    }
+
+    func send(message: String, stream: Bool) async throws {}
+    func handleError(error: any Error) -> ChatAlertInfo? { nil }
+    func deleteMessage(id: UUID) {}
+}
+
+private final class SnapshotMessage: ChatMessageInfo, @unchecked Sendable {
+    let uuid = UUID()
+    var id: UUID { uuid }
+    let text: String?
+    let childChatMessages: [SnapshotMessage] = []
+    let isUser = true
+    let isAssistant = false
+    let isAgentEvent = false
+    @Published var sendFailure: ChatSendFailure?
+    @Published var wasResponseStopped = false
+
+    init(text: String) {
+        self.text = text
+    }
+
+    static func == (lhs: SnapshotMessage, rhs: SnapshotMessage) -> Bool {
+        lhs.uuid == rhs.uuid
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(uuid)
     }
 }
 
