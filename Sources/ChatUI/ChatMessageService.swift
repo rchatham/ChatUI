@@ -142,6 +142,8 @@ public protocol ChatMessageInfo: Sendable, ObservableObject, Identifiable, Hasha
     var sendFailure: ChatSendFailure? { get }
     /// Whether the user explicitly stopped the response to this message.
     var wasResponseStopped: Bool { get }
+    /// The prompt that produced this assistant or agent message, when known.
+    var responseToMessageID: UUID? { get }
 }
 
 public extension ChatMessageInfo {
@@ -150,6 +152,7 @@ public extension ChatMessageInfo {
     /// Existing message models do not need to support inline send failures.
     var sendFailure: ChatSendFailure? { nil }
     var wasResponseStopped: Bool { false }
+    var responseToMessageID: UUID? { nil }
 }
 
 public protocol ChatMessageService: Sendable, ObservableObject {

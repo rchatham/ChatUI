@@ -73,15 +73,87 @@ struct ToolCallViewSnapshotTests {
     }
 
     @Test func renderStoppedResponseNotice() throws {
-        let message = SnapshotMessage(text: "Book the afternoon flight")
-        message.wasResponseStopped = true
-        let service = SnapshotMessageService(message: message)
-        let view = MessageListRow(
-            message: message,
-            composerViewModel: MessageComposerView.ViewModel(messageService: service),
-            supplementaryContent: { _ in nil }
-        )
+        let prompt = SnapshotMessage(text: "Book the afternoon flight")
+        prompt.wasResponseStopped = true
+        let partialResponse = SnapshotMessage(text: "The afternoon flight departs at", isUser: false)
+        let messages = [prompt, partialResponse]
+        let service = SnapshotMessageService(messages: messages)
+        let composer = MessageComposerView.ViewModel(messageService: service)
+        let sources = MessageListView<SnapshotMessageService>.stoppedNoticeSources(in: messages)
+        #expect(sources[prompt.uuid] == nil)
+        #expect(sources[partialResponse.uuid] === prompt)
+
+        let view = VStack(alignment: .leading) {
+            MessageListRow(message: prompt, composerViewModel: composer, supplementaryContent: { _ in nil })
+            MessageListRow(
+                message: partialResponse,
+                composerViewModel: composer,
+                supplementaryContent: { _ in nil },
+                stoppedSource: sources[partialResponse.uuid]
+            )
+        }
         try render(view, name: "stopped-response-notice", width: 460)
+    }
+
+    @Test func stoppedNoticeMovesWhenExistingAssistantGainsText() {
+        let prompt = SnapshotMessage(text: "prompt")
+        let assistant = SnapshotMessage(text: nil, isUser: false, responseToMessageID: prompt.uuid)
+        let list = MessageListView<SnapshotMessageService>.self
+        let messages = [prompt, assistant]
+        #expect(list.stoppedNoticeSources(in: messages)[prompt.uuid] === prompt)
+
+        var emittedChange = false
+        let subscription = assistant.objectWillChange.sink { emittedChange = true }
+        assistant.text = "partial response"
+        #expect(emittedChange)
+        #expect(list.stoppedNoticeSources(in: messages)[assistant.uuid] === prompt)
+        withExtendedLifetime(subscription) {}
+    }
+
+    @Test func stoppedNoticeFallsBackToPromptWithoutTextAndIgnoresLaterToolRows() {
+        let prompt = SnapshotMessage(text: "first")
+        let toolOnly = SnapshotMessage(text: nil, isUser: false)
+        let agentEvent = SnapshotMessage(text: "Tool finished", isUser: false, isAssistant: false)
+        let list = MessageListView<SnapshotMessageService>.self
+        let noResponse = list.stoppedNoticeSources(in: [prompt, toolOnly, agentEvent])
+        #expect(noResponse[prompt.uuid] === prompt)
+        #expect(noResponse[toolOnly.uuid] == nil)
+        #expect(noResponse[agentEvent.uuid] == nil)
+
+        let partial = SnapshotMessage(text: "partial", isUser: false)
+        let withResponse = list.stoppedNoticeSources(in: [prompt, partial, agentEvent])
+        #expect(withResponse[partial.uuid] === prompt)
+        #expect(withResponse[agentEvent.uuid] == nil)
+    }
+
+    @Test func stoppedNoticeFollowsOwnedResponseAcrossInterleavedSends() {
+        let first = SnapshotMessage(text: "first")
+        let second = SnapshotMessage(text: "second")
+        let firstResponse = SnapshotMessage(text: "first partial", isUser: false, responseToMessageID: first.uuid)
+        let secondResponse = SnapshotMessage(text: "second partial", isUser: false, responseToMessageID: second.uuid)
+        let sources = MessageListView<SnapshotMessageService>.stoppedNoticeSources(
+            in: [first, second, firstResponse, secondResponse]
+        )
+        #expect(sources[firstResponse.uuid] === first)
+        #expect(sources[secondResponse.uuid] === second)
+        #expect(sources[first.uuid] == nil)
+    }
+
+    @Test func stoppedNoticeStaysWithItsTurnWhenAnotherUserSends() {
+        let stoppedPrompt = SnapshotMessage(text: "first")
+        stoppedPrompt.wasResponseStopped = true
+        let partialResponse = SnapshotMessage(text: "partial", isUser: false)
+        let nextPrompt = SnapshotMessage(text: "second")
+        let nextResponse = SnapshotMessage(text: "answer", isUser: false)
+        let list = MessageListView<SnapshotMessageService>.self
+        let messages = [stoppedPrompt, partialResponse, nextPrompt, nextResponse]
+        let sources = list.stoppedNoticeSources(in: messages)
+
+        #expect(sources[stoppedPrompt.uuid] == nil)
+        #expect(sources[partialResponse.uuid] === stoppedPrompt)
+        #expect(sources[nextPrompt.uuid] == nil)
+        #expect(sources[nextResponse.uuid] === nextPrompt)
+        #expect(list.stoppedNoticeSources(in: [stoppedPrompt])[stoppedPrompt.uuid] === stoppedPrompt)
     }
 
     @Test func renderFailedMessageRetry() throws {
@@ -130,6 +202,10 @@ private final class SnapshotMessageService: ChatMessageService, @unchecked Senda
         chatMessages = [message]
     }
 
+    init(messages: [SnapshotMessage]) {
+        chatMessages = messages
+    }
+
     func send(message: String, stream: Bool) async throws {}
     func handleError(error: any Error) -> ChatAlertInfo? { nil }
     func deleteMessage(id: UUID) {}
@@ -138,16 +214,20 @@ private final class SnapshotMessageService: ChatMessageService, @unchecked Senda
 private final class SnapshotMessage: ChatMessageInfo, @unchecked Sendable {
     let uuid = UUID()
     var id: UUID { uuid }
-    let text: String?
+    @Published var text: String?
     let childChatMessages: [SnapshotMessage] = []
-    let isUser = true
-    let isAssistant = false
-    let isAgentEvent = false
+    let isUser: Bool
+    let isAssistant: Bool
+    var isAgentEvent: Bool { !isUser && !isAssistant }
+    let responseToMessageID: UUID?
     @Published var sendFailure: ChatSendFailure?
     @Published var wasResponseStopped = false
 
-    init(text: String) {
+    init(text: String?, isUser: Bool = true, isAssistant: Bool? = nil, responseToMessageID: UUID? = nil) {
         self.text = text
+        self.isUser = isUser
+        self.isAssistant = isAssistant ?? !isUser
+        self.responseToMessageID = responseToMessageID
     }
 
     static func == (lhs: SnapshotMessage, rhs: SnapshotMessage) -> Bool {
