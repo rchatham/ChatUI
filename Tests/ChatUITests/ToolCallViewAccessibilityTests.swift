@@ -488,6 +488,7 @@ struct ToolCallViewAccessibilityTests {
         let service = AccessibilityMessageService(messages: messages)
         let view = MessageListView(
             viewModel: MessageListView<AccessibilityMessageService>.ViewModel(messageService: service),
+            composerViewModel: MessageComposerView.ViewModel(messageService: service),
             supplementaryContent: nil
         )
         return AccessibilityHost(rootView: view, height: height)
