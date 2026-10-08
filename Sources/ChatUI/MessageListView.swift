@@ -11,6 +11,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
     @StateObject var viewModel: ViewModel
     @ObservedObject var composerViewModel: MessageComposerView.ViewModel
     @State private var messageRevision = 0
+    @State private var expandedToolCallRoute: ToolCallExpansionRoute?
     var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
     var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
 
@@ -26,7 +27,8 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                             composerViewModel: composerViewModel,
                             supplementaryContent: supplementaryContent,
                             toolCallContent: toolCallContent,
-                            stoppedSource: stoppedSources[message.uuid]
+                            stoppedSource: stoppedSources[message.uuid],
+                            expandedToolCallRoute: $expandedToolCallRoute
                         )
                     }
                 }
@@ -106,10 +108,16 @@ struct MessageListRow<Message: ChatMessageInfo>: View {
     var supplementaryContent: ((Message) -> AnyView?)?
     var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     var stoppedSource: Message? = nil
+    var expandedToolCallRoute: Binding<ToolCallExpansionRoute?> = .constant(nil)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CollapsibleMessageView(message: message, parentIsExpanded: .constant(false), toolCallContent: toolCallContent)
+            CollapsibleMessageView(
+                message: message,
+                parentIsExpanded: .constant(false),
+                expandedToolCallRoute: expandedToolCallRoute,
+                toolCallContent: toolCallContent
+            )
             if let failure = message.sendFailure {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")

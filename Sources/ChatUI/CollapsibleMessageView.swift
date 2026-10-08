@@ -14,25 +14,55 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
     @Binding var parentIsExpanded: Bool?
+    @Binding var expandedToolCallRoute: ToolCallExpansionRoute?
     var toolCallContent: ((ChatToolCall) -> AnyView?)?
 
+    init(
+        message: Message,
+        parentIsExpanded: Binding<Bool?>,
+        expandedToolCallRoute: Binding<ToolCallExpansionRoute?> = .constant(nil),
+        toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
+    ) {
+        self.message = message
+        self._parentIsExpanded = parentIsExpanded
+        self._expandedToolCallRoute = expandedToolCallRoute
+        self.toolCallContent = toolCallContent
+    }
+
     var isHidden: Bool {
-        return (message.text == nil || message.text?.isEmpty ?? false) && message.toolCalls.isEmpty && message.childChatMessages.isEmpty
+        !hasText && message.toolCalls.isEmpty && message.childChatMessages.isEmpty
+    }
+
+    private var hasText: Bool {
+        !(message.text?.isEmpty ?? true)
+    }
+
+    private var showsMessageBubble: Bool {
+        hasText || !message.childChatMessages.isEmpty
     }
 
     var body: some View {
         if !isHidden {
             VStack(alignment: .leading, spacing: 4) {
-                // Main message bubble
-                Button(action: action) {
-                    messageView
+                // Main message bubble. Tool-only assistant messages omit the empty bubble,
+                // while legacy textless messages retain their child disclosure control.
+                if showsMessageBubble {
+                    messageBubble
                 }
-                .buttonStyle(PlainButtonStyle())
 
                 if !message.toolCalls.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(message.toolCalls) { toolCall in
-                            ToolCallView(toolCall: toolCall, toolCallContent: toolCallContent)
+                        ForEach(Array(message.toolCalls.enumerated()), id: \.offset) { index, toolCall in
+                            ToolCallView(
+                                toolCall: toolCall,
+                                route: ToolCallExpansionRoute(
+                                    messageID: message.uuid,
+                                    index: index,
+                                    toolCallID: toolCall.id
+                                ),
+                                expandedRoute: $expandedToolCallRoute,
+                                toolCallContent: toolCallContent
+                            )
                         }
                     }
                 }
@@ -42,6 +72,26 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                     childMessagesView
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var messageBubble: some View {
+        if !hasText && !message.childChatMessages.isEmpty {
+            Button(action: action) {
+                messageView
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("message-bubble-\(message.uuid.uuidString)")
+            .accessibilityLabel("Replies")
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Hide replies" : "Show replies")
+        } else {
+            Button(action: action) {
+                messageView
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityIdentifier("message-bubble-\(message.uuid.uuidString)")
         }
     }
 
@@ -75,8 +125,13 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                 let binding = Binding<Bool?>(
                     get: { isExpanded },
                     set: { val in isExpanded = val ?? false })
-                CollapsibleMessageView(message: childMessage, parentIsExpanded: binding, toolCallContent: toolCallContent)
-                    .padding(.leading, 16)
+                CollapsibleMessageView(
+                    message: childMessage,
+                    parentIsExpanded: binding,
+                    expandedToolCallRoute: $expandedToolCallRoute,
+                    toolCallContent: toolCallContent
+                )
+                .padding(.leading, 16)
             }
         }
         .padding(.top, 4)
