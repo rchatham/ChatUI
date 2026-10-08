@@ -12,15 +12,66 @@ public struct ChatView<MessageService: ChatMessageService>: View {
     @StateObject var viewModel: ViewModel
     private var _settingsView: (() -> AnyView)?
     private var _supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
+    private var _toolCallContent: ((ChatToolCall) -> AnyView?)?
     private var voiceInputHandler: (any VoiceInputHandler)?
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil) {
+    /// Creates a chat view without supplementary content.
+    ///
+    /// - Parameters:
+    ///   - title: Optional navigation title.
+    ///   - messageService: The chat message service.
+    ///   - settingsView: Optional settings view builder.
+    ///   - voiceInputHandler: Optional voice input handler.
+    ///   - toolCallContent: Optional closure returning a custom view for a
+    ///     successful tool/agent call. The view renders **below** the call card
+    ///     independently of collapsed/expanded disclosure. Return `nil` to fall
+    ///     back to raw output. Never invoked for pending or failed calls.
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil, toolCallContent: ((ChatToolCall) -> AnyView?)? = nil) {
         _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
         _supplementaryContent = nil
+        _toolCallContent = toolCallContent
         self.voiceInputHandler = voiceInputHandler
     }
 
+    /// Old 4-parameter initializer preserved for source compatibility.
+    /// Function references and call sites using the pre-``toolCallContent``
+    /// arity continue to compile; delegates to the full initializer.
+    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil) {
+        self.init(title: title, messageService: messageService, settingsView: settingsView, voiceInputHandler: voiceInputHandler, toolCallContent: nil)
+    }
+
+    /// Creates a chat view with supplementary message content.
+    ///
+    /// - Parameters:
+    ///   - title: Optional navigation title.
+    ///   - messageService: The chat message service.
+    ///   - settingsView: Optional settings view builder.
+    ///   - voiceInputHandler: Optional voice input handler.
+    ///   - supplementaryContent: Closure returning a custom view for a chat
+    ///     message, rendered below the message bubble.
+    ///   - toolCallContent: Optional closure returning a custom view for a
+    ///     successful tool/agent call. The view renders **below** the call card
+    ///     independently of collapsed/expanded disclosure. Return `nil` to fall
+    ///     back to raw output. Never invoked for pending or failed calls.
+    public init(
+        title: String? = nil,
+        messageService: MessageService,
+        settingsView: (() -> AnyView)? = nil,
+        voiceInputHandler: (any VoiceInputHandler)? = nil,
+        supplementaryContent: @escaping (MessageService.ChatMessage) -> AnyView?,
+        toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
+    ) {
+        _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
+        _settingsView = settingsView
+        _supplementaryContent = supplementaryContent
+        _toolCallContent = toolCallContent
+        self.voiceInputHandler = voiceInputHandler
+    }
+
+    /// Old 5-parameter initializer with supplementary content, preserved for
+    /// source compatibility. Function references using the pre-``toolCallContent``
+    /// arity continue to compile; delegates to the full initializer.
     public init(
         title: String? = nil,
         messageService: MessageService,
@@ -28,15 +79,22 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         voiceInputHandler: (any VoiceInputHandler)? = nil,
         supplementaryContent: @escaping (MessageService.ChatMessage) -> AnyView?
     ) {
-        _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
-        _settingsView = settingsView
-        _supplementaryContent = supplementaryContent
-        self.voiceInputHandler = voiceInputHandler
+        self.init(title: title, messageService: messageService, settingsView: settingsView, voiceInputHandler: voiceInputHandler, supplementaryContent: supplementaryContent, toolCallContent: nil)
     }
 
-    public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil) {
+    /// Creates a chat view from a pre-built ViewModel.
+    ///
+    /// - Parameters:
+    ///   - viewModel: The pre-configured ViewModel.
+    ///   - voiceInputHandler: Optional voice input handler.
+    ///   - toolCallContent: Optional closure returning a custom view for a
+    ///     successful tool/agent call. The view renders **below** the call card
+    ///     independently of collapsed/expanded disclosure. Return `nil` to fall
+    ///     back to raw output. Never invoked for pending or failed calls.
+    public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil, toolCallContent: ((ChatToolCall) -> AnyView?)? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel)
         _supplementaryContent = nil
+        _toolCallContent = toolCallContent
         self.voiceInputHandler = voiceInputHandler
     }
 
@@ -71,7 +129,8 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         MessageListView(
             viewModel: viewModel.messageListViewModel(),
             composerViewModel: viewModel.messageComposerViewModel(voiceInputHandler: voiceInputHandler),
-            supplementaryContent: _supplementaryContent
+            supplementaryContent: _supplementaryContent,
+            toolCallContent: _toolCallContent
         )
     }
 

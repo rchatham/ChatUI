@@ -9,11 +9,27 @@ import SwiftUI
 
 struct ToolCallView: View {
     let toolCall: ChatToolCall
+    let toolCallContent: ((ChatToolCall) -> AnyView?)?
     @State private var isExpanded: Bool
 
-    init(toolCall: ChatToolCall, isExpanded: Bool = false) {
+    init(toolCall: ChatToolCall, isExpanded: Bool = false, toolCallContent: ((ChatToolCall) -> AnyView?)? = nil) {
         self.toolCall = toolCall
+        self.toolCallContent = toolCallContent
         self._isExpanded = State(initialValue: isExpanded)
+    }
+
+    /// Old 1-parameter initializer preserved for source compatibility.
+    /// Function references using the pre-``toolCallContent`` arity continue
+    /// to compile; delegates to the full initializer.
+    init(toolCall: ChatToolCall) {
+        self.init(toolCall: toolCall, isExpanded: false, toolCallContent: nil)
+    }
+
+    /// Old 2-parameter initializer preserved for source compatibility.
+    /// Function references using the pre-``toolCallContent`` arity continue
+    /// to compile; delegates to the full initializer.
+    init(toolCall: ChatToolCall, isExpanded: Bool) {
+        self.init(toolCall: toolCall, isExpanded: isExpanded, toolCallContent: nil)
     }
 
     var body: some View {
@@ -56,7 +72,7 @@ struct ToolCallView: View {
                 if !toolCall.children.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(toolCall.children) { child in
-                            ToolCallView(toolCall: child)
+                            ToolCallView(toolCall: child, toolCallContent: toolCallContent)
                         }
                     }
                     .padding(.leading, 12)
@@ -65,6 +81,13 @@ struct ToolCallView: View {
                         alignment: .leading
                     )
                 }
+            }
+
+            // Custom rich content BELOW card, independent of disclosure state
+            if toolCall.status == .success,
+               let content = toolCallContent?(toolCall) {
+                content
+                    .padding(.top, 4)
             }
         }
     }

@@ -14,6 +14,7 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
     @Binding var parentIsExpanded: Bool?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)?
 
     var isHidden: Bool {
         return (message.text == nil || message.text?.isEmpty ?? false) && message.toolCalls.isEmpty && message.childChatMessages.isEmpty
@@ -31,7 +32,7 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                 if !message.toolCalls.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(message.toolCalls) { toolCall in
-                            ToolCallView(toolCall: toolCall)
+                            ToolCallView(toolCall: toolCall, toolCallContent: toolCallContent)
                         }
                     }
                 }
@@ -74,7 +75,7 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                 let binding = Binding<Bool?>(
                     get: { isExpanded },
                     set: { val in isExpanded = val ?? false })
-                CollapsibleMessageView(message: childMessage, parentIsExpanded: binding)
+                CollapsibleMessageView(message: childMessage, parentIsExpanded: binding, toolCallContent: toolCallContent)
                     .padding(.leading, 16)
             }
         }

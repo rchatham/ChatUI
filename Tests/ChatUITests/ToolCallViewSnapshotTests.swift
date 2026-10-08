@@ -156,6 +156,127 @@ struct ToolCallViewSnapshotTests {
         #expect(list.stoppedNoticeSources(in: [stoppedPrompt])[stoppedPrompt.uuid] === stoppedPrompt)
     }
 
+    // MARK: - Below-card rich content snapshots
+
+    @Test func renderSuccessWithCustomContentBelowCard() throws {
+        let call = ChatToolCall(
+            id: "t1", name: "search", kind: .tool,
+            arguments: #"{"query":"flights"}"#, status: .success, result: "3 results",
+            displayContent: ChatToolCall.DisplayContent(type: "search_results", json: #"{"items":[{"title":"Flight A"}]}"#, summary: "1 flight found", itemCount: 1)
+        )
+        let toolCallContent: (ChatToolCall) -> AnyView? = { tc in
+            AnyView(
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Results: \(tc.displayContent?.summary ?? "none")")
+                        .font(.subheadline.weight(.semibold))
+                    Text(tc.displayContent?.json ?? "")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(8)
+                .background(Color.blue.opacity(0.08))
+                .cornerRadius(8)
+            )
+        }
+        // Success with expanded details — content still below
+        let expandedView = ToolCallView(toolCall: call, isExpanded: true, toolCallContent: toolCallContent)
+        try render(expandedView, name: "rich-content-success-expanded", width: 420)
+        // Success collapsed — content BELOW header independent of disclosure
+        let collapsedView = ToolCallView(toolCall: call, isExpanded: false, toolCallContent: toolCallContent)
+        try render(collapsedView, name: "rich-content-success-collapsed", width: 420)
+    }
+
+    @Test func renderPendingCallHidesCustomContent() throws {
+        let call = ChatToolCall(
+            id: "t1", name: "search", kind: .tool,
+            arguments: #"{"query":"flights"}"#, status: .pending,
+            displayContent: ChatToolCall.DisplayContent(type: "search_results", json: "{}")
+        )
+        let toolCallContent: (ChatToolCall) -> AnyView? = { _ in
+            AnyView(Text("Should not render").font(.caption).foregroundStyle(.red))
+        }
+        let view = ToolCallView(toolCall: call, isExpanded: true, toolCallContent: toolCallContent)
+        try render(view, name: "rich-content-pending-hidden", width: 420)
+    }
+
+    @Test func renderFailedCallHidesCustomContent() throws {
+        let call = ChatToolCall(
+            id: "t1", name: "search", kind: .tool,
+            arguments: #"{"query":"flights"}"#, status: .failure, result: "timeout",
+            displayContent: ChatToolCall.DisplayContent(type: "search_results", json: "{}")
+        )
+        let toolCallContent: (ChatToolCall) -> AnyView? = { _ in
+            AnyView(Text("Should not render").font(.caption).foregroundStyle(.red))
+        }
+        let view = ToolCallView(toolCall: call, isExpanded: true, toolCallContent: toolCallContent)
+        try render(view, name: "rich-content-failure-hidden", width: 420)
+    }
+
+    @Test func renderAgentWithNestedContentInheritsClosure() throws {
+        let toolCallContent: (ChatToolCall) -> AnyView? = { tc in
+            guard let dc = tc.displayContent else { return nil }
+            return AnyView(
+                Text("[Rich] \(dc.summary ?? dc.type)")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.blue)
+                    .padding(6)
+                    .background(Color.blue.opacity(0.05))
+                    .cornerRadius(6)
+            )
+        }
+        let agent = ChatToolCall(
+            id: "a1", name: "TripPlanner", kind: .agent, status: .success,
+            details: "started: plan trip",
+            children: [
+                ChatToolCall(
+                    id: "t1", name: "search", kind: .tool,
+                    arguments: #"{"q":"flights"}"#, status: .success, result: "5 flights",
+                    displayContent: ChatToolCall.DisplayContent(type: "search_results", json: #"{"items":[{"title":"Flight A"}]}"#, summary: "5 flights found", itemCount: 5)
+                )
+            ],
+            displayContent: ChatToolCall.DisplayContent(type: "plan", json: "{}", summary: "Trip planned")
+        )
+        let view = ToolCallView(toolCall: agent, isExpanded: true, toolCallContent: toolCallContent)
+        try render(view, name: "rich-content-agent-nested", width: 480)
+    }
+
+    @Test func renderCallWithoutDisplayContentReturnsNilFallback() throws {
+        let call = ChatToolCall(id: "t1", name: "search", status: .success, result: "raw")
+        let toolCallContent: (ChatToolCall) -> AnyView? = { tc in
+            guard tc.displayContent != nil else { return nil }
+            return AnyView(Text("rich"))
+        }
+        let view = ToolCallView(toolCall: call, isExpanded: true, toolCallContent: toolCallContent)
+        try render(view, name: "rich-content-fallback-raw", width: 420)
+    }
+
+    @Test func renderRichContentMobileWidth() throws {
+        let call = ChatToolCall(
+            id: "t1", name: "search", kind: .tool,
+            arguments: #"{"query":"flights"}"#, status: .success, result: "3 results",
+            displayContent: ChatToolCall.DisplayContent(type: "search_results", json: #"{"items":[{"title":"Flight A"}]}"#, summary: "1 flight found", itemCount: 1)
+        )
+        let toolCallContent: (ChatToolCall) -> AnyView? = { tc in
+            AnyView(
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Results: \(tc.displayContent?.summary ?? "none")")
+                        .font(.subheadline.weight(.semibold))
+                    Text(tc.displayContent?.json ?? "")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                .padding(8)
+                .background(Color.blue.opacity(0.08))
+                .cornerRadius(8)
+            )
+        }
+        let view = ToolCallView(toolCall: call, isExpanded: false, toolCallContent: toolCallContent)
+        try render(view, name: "rich-content-mobile-collapsed", width: 375)
+        let expandedView = ToolCallView(toolCall: call, isExpanded: true, toolCallContent: toolCallContent)
+        try render(expandedView, name: "rich-content-mobile-expanded", width: 375)
+    }
+
     @Test func renderFailedMessageRetry() throws {
         let message = SnapshotMessage(text: "Book the afternoon flight")
         message.sendFailure = ChatSendFailure(message: "The connection was interrupted.")

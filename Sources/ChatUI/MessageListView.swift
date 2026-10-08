@@ -12,6 +12,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
     @ObservedObject var composerViewModel: MessageComposerView.ViewModel
     @State private var messageRevision = 0
     var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -24,6 +25,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                             message: message,
                             composerViewModel: composerViewModel,
                             supplementaryContent: supplementaryContent,
+                            toolCallContent: toolCallContent,
                             stoppedSource: stoppedSources[message.uuid]
                         )
                     }
@@ -102,11 +104,12 @@ struct MessageListRow<Message: ChatMessageInfo>: View {
     @ObservedObject var message: Message
     @ObservedObject var composerViewModel: MessageComposerView.ViewModel
     var supplementaryContent: ((Message) -> AnyView?)?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     var stoppedSource: Message? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CollapsibleMessageView(message: message, parentIsExpanded: .constant(false))
+            CollapsibleMessageView(message: message, parentIsExpanded: .constant(false), toolCallContent: toolCallContent)
             if let failure = message.sendFailure {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
