@@ -13,6 +13,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
     @State private var messageRevision = 0
     @State private var expandedToolCallRoute: ToolCallExpansionRoute?
     var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -25,6 +26,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                             message: message,
                             composerViewModel: composerViewModel,
                             supplementaryContent: supplementaryContent,
+                            toolCallContent: toolCallContent,
                             stoppedSource: stoppedSources[message.uuid],
                             expandedToolCallRoute: $expandedToolCallRoute
                         )
@@ -104,6 +106,7 @@ struct MessageListRow<Message: ChatMessageInfo>: View {
     @ObservedObject var message: Message
     @ObservedObject var composerViewModel: MessageComposerView.ViewModel
     var supplementaryContent: ((Message) -> AnyView?)?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     var stoppedSource: Message? = nil
     var expandedToolCallRoute: Binding<ToolCallExpansionRoute?> = .constant(nil)
 
@@ -112,7 +115,8 @@ struct MessageListRow<Message: ChatMessageInfo>: View {
             CollapsibleMessageView(
                 message: message,
                 parentIsExpanded: .constant(false),
-                expandedToolCallRoute: expandedToolCallRoute
+                expandedToolCallRoute: expandedToolCallRoute,
+                toolCallContent: toolCallContent
             )
             if let failure = message.sendFailure {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {

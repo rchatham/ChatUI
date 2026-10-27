@@ -52,12 +52,14 @@ struct ToolCallExpansionRoute: Hashable {
 
 struct ToolCallView: View {
     let toolCall: ChatToolCall
+    let toolCallContent: ((ChatToolCall) -> AnyView?)?
     @State private var standaloneIsExpanded: Bool
     private let route: ToolCallExpansionRoute?
     private let expandedRoute: Binding<ToolCallExpansionRoute?>?
 
-    init(toolCall: ChatToolCall, isExpanded: Bool = false) {
+    init(toolCall: ChatToolCall, isExpanded: Bool = false, toolCallContent: ((ChatToolCall) -> AnyView?)? = nil) {
         self.toolCall = toolCall
+        self.toolCallContent = toolCallContent
         self._standaloneIsExpanded = State(initialValue: isExpanded)
         self.route = nil
         self.expandedRoute = nil
@@ -66,12 +68,28 @@ struct ToolCallView: View {
     init(
         toolCall: ChatToolCall,
         route: ToolCallExpansionRoute,
-        expandedRoute: Binding<ToolCallExpansionRoute?>
+        expandedRoute: Binding<ToolCallExpansionRoute?>,
+        toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     ) {
         self.toolCall = toolCall
+        self.toolCallContent = toolCallContent
         self._standaloneIsExpanded = State(initialValue: false)
         self.route = route
         self.expandedRoute = expandedRoute
+    }
+
+    /// Old 1-parameter initializer preserved for source compatibility.
+    /// Function references using the pre-``toolCallContent`` arity continue
+    /// to compile; delegates to the full initializer.
+    init(toolCall: ChatToolCall) {
+        self.init(toolCall: toolCall, isExpanded: false, toolCallContent: nil)
+    }
+
+    /// Old 2-parameter initializer preserved for source compatibility.
+    /// Function references using the pre-``toolCallContent`` arity continue
+    /// to compile; delegates to the full initializer.
+    init(toolCall: ChatToolCall, isExpanded: Bool) {
+        self.init(toolCall: toolCall, isExpanded: isExpanded, toolCallContent: nil)
     }
 
     var body: some View {
@@ -128,6 +146,13 @@ struct ToolCallView: View {
                     detail(title: toolCall.status == .failure ? "Error" : "Output", value: result)
                 }
             }
+
+            // Custom rich content BELOW card, independent of disclosure state
+            if toolCall.status == .success,
+               let content = toolCallContent?(toolCall) {
+                content
+                    .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
@@ -173,10 +198,11 @@ struct ToolCallView: View {
             ToolCallView(
                 toolCall: child,
                 route: route.appending(index: index, toolCallID: child.id),
-                expandedRoute: expandedRoute
+                expandedRoute: expandedRoute,
+                toolCallContent: toolCallContent
             )
         } else {
-            ToolCallView(toolCall: child)
+            ToolCallView(toolCall: child, toolCallContent: toolCallContent)
         }
     }
 
