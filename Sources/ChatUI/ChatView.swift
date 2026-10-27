@@ -91,6 +91,10 @@ public struct ChatView<MessageService: ChatMessageService>: View {
     ///     successful tool/agent call. The view renders **below** the call card
     ///     independently of collapsed/expanded disclosure. Return `nil` to fall
     ///     back to raw output. Never invoked for pending or failed calls.
+    public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil) {
+        self.init(viewModel: viewModel, voiceInputHandler: voiceInputHandler, toolCallContent: nil)
+    }
+
     public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil, toolCallContent: ((ChatToolCall) -> AnyView?)? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel)
         _supplementaryContent = nil

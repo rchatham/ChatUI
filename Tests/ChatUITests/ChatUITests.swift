@@ -195,6 +195,13 @@ import Testing
     _ = view.body
 }
 
+@MainActor
+@Test func chatViewViewModelOld2ParamFunctionReferenceCompiles() {
+    let makeView: (ChatView<CompatSnapshotService>.ViewModel, (any VoiceInputHandler)?) -> ChatView<CompatSnapshotService> = ChatView<CompatSnapshotService>.init(viewModel:voiceInputHandler:)
+    let model = ChatView<CompatSnapshotService>.ViewModel(title: "Compatibility", messageService: CompatSnapshotService())
+    _ = makeView(model, nil).body
+}
+
 private final class CompatSnapshotService: ChatMessageService, @unchecked Sendable {
     typealias ChatMessage = TestMessage
     @Published var chatMessages: [TestMessage] = [TestMessage(text: "hi")]
