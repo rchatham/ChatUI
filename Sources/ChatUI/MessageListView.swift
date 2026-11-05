@@ -34,18 +34,17 @@ struct MessageListView<MessageService: ChatMessageService>: View {
             }
             .onAppear {
                 scrollToBottom(scrollProxy: scrollProxy)
-                #if os(iOS)
-                NotificationCenter.default.addObserver(
-                    forName: UIResponder.keyboardDidShowNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    Task { @MainActor in
-                        scrollToBottom(scrollProxy: scrollProxy)
-                    }
-                }
-                #endif
             }
+            #if os(iOS)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification).receive(on: DispatchQueue.main)) { _ in
+                // Unlike a Task hop from an escaping NotificationCenter observer
+                // block, a view-modifier action closure is @MainActor-isolated, so
+                // capturing the non-Sendable ScrollViewProxy is safe under strict
+                // concurrency / region isolation. The publisher subscription also
+                // needs no manual observer removal.
+                scrollToBottom(scrollProxy: scrollProxy)
+            }
+            #endif
             .onReceive(
                 Publishers.MergeMany(viewModel.messageService.chatMessages.map { $0.objectWillChange })
                     .receive(on: DispatchQueue.main)
@@ -54,11 +53,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                 // Recalculate which row owns the stopped notice in that case.
                 messageRevision &+= 1
             }
-            .onDisappear {
-                #if os(iOS)
-                NotificationCenter.default.removeObserver(self)
-                #endif
-            }.onChange(of: viewModel.messageService.chatMessages.last?.text) { (_,_) in
+            .onChange(of: viewModel.messageService.chatMessages.last?.text) { (_,_) in
                 scrollToBottom(scrollProxy: scrollProxy)
             }
         }
