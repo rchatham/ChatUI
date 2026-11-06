@@ -24,3 +24,13 @@ jobs:
           name: snapshots
           path: ${{ runner.temp }}/snapshots
           if-no-files-found: ignore
+      - name: Print snapshots (base64, for tooling without artifact access)
+        if: always()
+        run: |
+          shopt -s nullglob
+          for f in "$RUNNER_TEMP"/snapshots/*.png; do
+            echo "SNAPSHOT-BEGIN $(basename "$f")"
+            base64 -i "$f" | tr -d '\n'
+            echo
+            echo "SNAPSHOT-END"
+          done
