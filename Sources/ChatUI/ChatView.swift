@@ -13,12 +13,25 @@ public struct ChatView<MessageService: ChatMessageService>: View {
     private var _settingsView: (() -> AnyView)?
     private var _supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
     private var voiceInputHandler: (any VoiceInputHandler)?
+    /// Builds the live voice conversation screen (typically a
+    /// `RealtimeConversationView`) shown from the composer's live-voice
+    /// button. Called each time it's presented, so it can create a fresh
+    /// session. When nil, the button is hidden.
+    private var _realtimeConversation: (() -> AnyView)?
+    @State private var showRealtimeConversation = false
 
-    public init(title: String? = nil, messageService: MessageService, settingsView: (() -> AnyView)? = nil, voiceInputHandler: (any VoiceInputHandler)? = nil) {
+    public init(
+        title: String? = nil,
+        messageService: MessageService,
+        settingsView: (() -> AnyView)? = nil,
+        voiceInputHandler: (any VoiceInputHandler)? = nil,
+        realtimeConversation: (() -> AnyView)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
         _supplementaryContent = nil
         self.voiceInputHandler = voiceInputHandler
+        _realtimeConversation = realtimeConversation
     }
 
     public init(
@@ -26,18 +39,25 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         messageService: MessageService,
         settingsView: (() -> AnyView)? = nil,
         voiceInputHandler: (any VoiceInputHandler)? = nil,
+        realtimeConversation: (() -> AnyView)? = nil,
         supplementaryContent: @escaping (MessageService.ChatMessage) -> AnyView?
     ) {
         _viewModel = StateObject(wrappedValue: ViewModel(title: title, messageService: messageService))
         _settingsView = settingsView
         _supplementaryContent = supplementaryContent
         self.voiceInputHandler = voiceInputHandler
+        _realtimeConversation = realtimeConversation
     }
 
-    public init(viewModel: ViewModel, voiceInputHandler: (any VoiceInputHandler)? = nil) {
+    public init(
+        viewModel: ViewModel,
+        voiceInputHandler: (any VoiceInputHandler)? = nil,
+        realtimeConversation: (() -> AnyView)? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: viewModel)
         _supplementaryContent = nil
         self.voiceInputHandler = voiceInputHandler
+        _realtimeConversation = realtimeConversation
     }
 
     public var body: some View {
@@ -64,6 +84,13 @@ public struct ChatView<MessageService: ChatMessageService>: View {
         #if os(iOS)
         .dismissKeyboardOnSwipe()
         #endif
+        .sheet(isPresented: $showRealtimeConversation) {
+            if let realtimeConversation = _realtimeConversation {
+                NavigationStack {
+                    realtimeConversation()
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -77,7 +104,10 @@ public struct ChatView<MessageService: ChatMessageService>: View {
 
     @ViewBuilder
     var messageComposerView: some View {
-        MessageComposerView(viewModel: viewModel.messageComposerViewModel(voiceInputHandler: voiceInputHandler))
+        MessageComposerView(
+            viewModel: viewModel.messageComposerViewModel(voiceInputHandler: voiceInputHandler),
+            onStartRealtime: _realtimeConversation == nil ? nil : { showRealtimeConversation = true }
+        )
     }
 }
 
