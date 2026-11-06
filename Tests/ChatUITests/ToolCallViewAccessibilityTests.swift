@@ -183,6 +183,63 @@ struct ToolCallViewAccessibilityTests {
         #expect(!elements.contains { $0.accessibleText == "A details" })
     }
 
+    @Test(arguments: [375.0, 800.0])
+    func richResultsSurviveCoordinatedNestedDisclosure(width: Double) throws {
+        let messageID = uuid("00000000-0000-0000-0000-000000000008")
+        let first = ChatToolCall(
+            id: "child-a", name: "First", status: .success, result: "First raw output",
+            displayContent: .init(type: "test", json: "{}", summary: "First rich result")
+        )
+        let second = ChatToolCall(
+            id: "child-b", name: "Second", status: .success, result: "Second raw output",
+            displayContent: .init(type: "test", json: "{}", summary: "Second rich result")
+        )
+        let message = AccessibilityMessage(
+            uuid: messageID,
+            toolCalls: [ChatToolCall(
+                id: "parent", name: "Research", kind: .agent, status: .success,
+                children: [first, second],
+                displayContent: .init(type: "test", json: "{}", summary: "Research completed")
+            )]
+        )
+        let hosted = hostMessageList(
+            messages: [message], height: 520, width: CGFloat(width),
+            toolCallContent: { call in
+                guard let summary = call.displayContent?.summary else { return nil }
+                return AnyView(Text(summary))
+            }
+        )
+        defer { hosted.close() }
+
+        var elements = hosted.elements(waitingFor: "Research completed")
+        #expect(!elements.contains { $0.identifier == "message-bubble-\(messageID.uuidString)" })
+        #expect(!elements.contains { $0.accessibleText == "First rich result" })
+        try hosted.snapshot(name: "rich-coordinated-collapsed-\(Int(width))")
+
+        try hosted.click(blankRegionOfButton: "Agent Research, Completed", waitingForValue: "Expanded")
+        elements = hosted.elements(waitingFor: "Second rich result")
+        #expect(elements.contains { $0.accessibleText == "First rich result" })
+        #expect(elements.contains { $0.accessibleText == "Research completed" })
+        #expect(!elements.contains { $0.accessibleText == "First raw output" })
+        #expect(!elements.contains { $0.accessibleText == "Second raw output" })
+
+        try hosted.press(label: "Tool First, Completed", waitingForValue: "Expanded")
+        #expect(hosted.elements(waitingFor: "First raw output").contains { $0.accessibleText == "First raw output" })
+        try hosted.press(label: "Tool Second, Completed", waitingForValue: "Expanded")
+        elements = hosted.elements(waitingFor: "Second raw output")
+        #expect(elements.first { $0.accessibleText == "Tool First, Completed" }?.value as? String == "Collapsed")
+        #expect(elements.first { $0.accessibleText == "Agent Research, Completed" }?.value as? String == "Expanded")
+        #expect(!elements.contains { $0.accessibleText == "First raw output" })
+        #expect(elements.contains { $0.accessibleText == "First rich result" })
+        #expect(elements.contains { $0.accessibleText == "Second rich result" })
+        try hosted.snapshot(name: "rich-coordinated-nested-\(Int(width))")
+
+        try hosted.press(label: "Agent Research, Completed", waitingForValue: "Collapsed")
+        elements = hosted.elements(waitingFor: "Research completed")
+        #expect(!elements.contains { $0.accessibleText == "First rich result" })
+        #expect(elements.contains { $0.accessibleText == "Research completed" })
+    }
+
     @Test func topLevelAccordionCoordinatesAcrossMessages() throws {
         let firstMessage = AccessibilityMessage(
             uuid: uuid("00000000-0000-0000-0000-000000000004"),
@@ -481,7 +538,9 @@ struct ToolCallViewAccessibilityTests {
 
     private func hostMessageList(
         messages: [AccessibilityMessage],
-        height: CGFloat = 320
+        height: CGFloat = 320,
+        width: CGFloat = 520,
+        toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     ) -> AccessibilityHost {
         NSApplication.shared.finishLaunching()
         enableInProcessAccessibilityHierarchy()
@@ -489,9 +548,10 @@ struct ToolCallViewAccessibilityTests {
         let view = MessageListView(
             viewModel: MessageListView<AccessibilityMessageService>.ViewModel(messageService: service),
             composerViewModel: MessageComposerView.ViewModel(messageService: service),
-            supplementaryContent: nil
+            supplementaryContent: nil,
+            toolCallContent: toolCallContent
         )
-        return AccessibilityHost(rootView: view, height: height)
+        return AccessibilityHost(rootView: view, width: width, height: height)
     }
 
     private func uuid(_ value: String) -> UUID {
@@ -573,7 +633,10 @@ private final class AccessibilityHost {
             _ = NSApplication.shared.perform(selector, with: NSNumber(value: true))
         }
 
-        host = NSHostingView(rootView: AnyView(rootView.frame(width: width, alignment: .leading)))
+        host = NSHostingView(rootView: AnyView(rootView
+            .frame(width: width, alignment: .leading)
+            .background(Color(nsColor: .windowBackgroundColor))))
+        host.appearance = NSAppearance(named: .aqua)
         host.frame = NSRect(x: 0, y: 0, width: width, height: height)
         window = NSWindow(
             contentRect: host.frame,
@@ -588,6 +651,25 @@ private final class AccessibilityHost {
     func close() {
         window.orderOut(nil)
         window.contentView = nil
+    }
+
+    func snapshot(name: String) throws {
+        // AX values update before SwiftUI's disclosure animation is rendered.
+        // Pump the run loop past the 0.2-second transition before caching pixels.
+        let deadline = Date().addingTimeInterval(0.3)
+        while Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.01)))
+        }
+        host.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        host.displayIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let directory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["RICH_RESULTS_ARTIFACT_DIR"]
+            ?? "/tmp/chatui-toolcall-screenshots", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try png.write(to: directory.appendingPathComponent("\(name).png"))
     }
 
     func press(label: String, waitingForValue expectedValue: String) throws {

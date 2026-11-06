@@ -15,15 +15,18 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
     @State private var isExpanded = false
     @Binding var parentIsExpanded: Bool?
     @Binding var expandedToolCallRoute: ToolCallExpansionRoute?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)?
 
     init(
         message: Message,
         parentIsExpanded: Binding<Bool?>,
-        expandedToolCallRoute: Binding<ToolCallExpansionRoute?> = .constant(nil)
+        expandedToolCallRoute: Binding<ToolCallExpansionRoute?> = .constant(nil),
+        toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     ) {
         self.message = message
         self._parentIsExpanded = parentIsExpanded
         self._expandedToolCallRoute = expandedToolCallRoute
+        self.toolCallContent = toolCallContent
     }
 
     var isHidden: Bool {
@@ -57,7 +60,8 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                                     index: index,
                                     toolCallID: toolCall.id
                                 ),
-                                expandedRoute: $expandedToolCallRoute
+                                expandedRoute: $expandedToolCallRoute,
+                                toolCallContent: toolCallContent
                             )
                         }
                     }
@@ -124,7 +128,8 @@ struct CollapsibleMessageView<Message: ChatMessageInfo>: View {
                 CollapsibleMessageView(
                     message: childMessage,
                     parentIsExpanded: binding,
-                    expandedToolCallRoute: $expandedToolCallRoute
+                    expandedToolCallRoute: $expandedToolCallRoute,
+                    toolCallContent: toolCallContent
                 )
                 .padding(.leading, 16)
             }

@@ -15,6 +15,27 @@ import SwiftUI
 /// or failed result. `arguments` and `result` are presented as expandable details.
 /// Agent invocations use ``Kind/agent`` and carry `details` plus `children` for
 /// nested sub-tool calls and sub-agent delegations.
+///
+/// ## Rich display results
+///
+/// Attach a ``DisplayContent`` payload to successful calls to enable custom
+/// rendering beneath the card via ``ChatView``'s `toolCallContent` closure:
+///
+/// ```swift
+/// let call = ChatToolCall(
+///     id: "search-1", name: "search", status: .success,
+///     result: "3 items",  // raw provider output preserved for replay
+///     displayContent: ChatToolCall.DisplayContent(
+///         type: "search_results",
+///         json: #"{"items":[...]}"#,
+///         summary: "3 results found",
+///         itemCount: 3
+///     )
+/// )
+/// ```
+///
+/// - ``displayContent`` is backward-compatible Codable: old payloads decode to `nil`.
+/// - The raw `result` string always remains available for provider context/replay.
 public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
     public enum Status: Sendable, Hashable, Codable {
         case pending
@@ -44,8 +65,48 @@ public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
     public var details: String?
     /// Nested sub-tool calls and sub-agent delegations (agents only).
     public var children: [ChatToolCall]
+    /// Optional typed display payload for rich custom rendering beneath the call card.
+    ///
+    /// When set on a call with ``Status/success``, the `toolCallContent` closure
+    /// supplied to ``ChatView`` receives the full ``ChatToolCall`` and can use
+    /// this payload to render typed custom views below the card. Pending or failed
+    /// calls never trigger the closure, regardless of this value.
+    ///
+    /// The raw `result` string always remains available for provider context/replay
+    /// even when `displayContent` is present.
+    public var displayContent: DisplayContent?
 
-    public init(id: String, name: String, kind: Kind = .tool, arguments: String? = nil, status: Status = .pending, result: String? = nil, details: String? = nil, children: [ChatToolCall] = []) {
+    /// Typed display payload for custom rich rendering beneath a tool/agent card.
+    ///
+    /// Use `type` as a stable discriminator for typed host-side decoding
+    /// (e.g. `"search_results"`, `"calendar_events"`). The `json` field carries
+    /// the serialized structured data. `summary` is an optional human-readable
+    /// label for collapsed or compact display states. `itemCount` tracks the
+    /// number of result items.
+    public struct DisplayContent: Codable, Sendable, Hashable {
+        /// Stable discriminator for typed host decoding (e.g. `"search_results"`).
+        public var type: String
+        /// Serialized JSON payload for decoded rendering.
+        public var json: String
+        /// Optional human-readable summary (e.g. for collapsed state).
+        public var summary: String?
+        /// Number of result items carried by this payload.
+        public var itemCount: Int
+
+        /// - Parameters:
+        ///   - type: Stable discriminator for typed decoding.
+        ///   - json: Serialized JSON payload.
+        ///   - summary: Optional human-readable label.
+        ///   - itemCount: Number of result items (default 1).
+        public init(type: String, json: String, summary: String? = nil, itemCount: Int = 1) {
+            self.type = type
+            self.json = json
+            self.summary = summary
+            self.itemCount = itemCount
+        }
+    }
+
+    public init(id: String, name: String, kind: Kind = .tool, arguments: String? = nil, status: Status = .pending, result: String? = nil, details: String? = nil, children: [ChatToolCall] = [], displayContent: DisplayContent? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
@@ -54,9 +115,17 @@ public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
         self.result = result
         self.details = details
         self.children = children
+        self.displayContent = displayContent
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, kind, arguments, status, result, details, children }
+    /// Old 8-parameter initializer preserved for source compatibility.
+    /// Function references and call sites using the pre-``DisplayContent``
+    /// arity continue to compile; delegates to the full initializer.
+    public init(id: String, name: String, kind: Kind = .tool, arguments: String? = nil, status: Status = .pending, result: String? = nil, details: String? = nil, children: [ChatToolCall] = []) {
+        self.init(id: id, name: name, kind: kind, arguments: arguments, status: status, result: result, details: details, children: children, displayContent: nil)
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, kind, arguments, status, result, details, children, displayContent }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -67,6 +136,7 @@ public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
         result = try c.decodeIfPresent(String.self, forKey: .result)
         details = try c.decodeIfPresent(String.self, forKey: .details)
         children = try c.decodeIfPresent([ChatToolCall].self, forKey: .children) ?? []
+        displayContent = try c.decodeIfPresent(DisplayContent.self, forKey: .displayContent)
     }
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -78,6 +148,7 @@ public struct ChatToolCall: Identifiable, Sendable, Hashable, Codable {
         try c.encodeIfPresent(result, forKey: .result)
         try c.encodeIfPresent(details, forKey: .details)
         if !children.isEmpty { try c.encode(children, forKey: .children) }
+        try c.encodeIfPresent(displayContent, forKey: .displayContent)
     }
 }
 

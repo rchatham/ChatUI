@@ -7,12 +7,20 @@
 import SwiftUI
 import Combine
 
+#if os(iOS)
+private let messageListKeyboardDidShow = UIResponder.keyboardDidShowNotification
+#else
+/// iOS-only event; declared so the modifier chain stays unconditional.
+private let messageListKeyboardDidShow = Notification.Name("ChatUI.messageList.keyboardDidShow")
+#endif
+
 struct MessageListView<MessageService: ChatMessageService>: View {
     @StateObject var viewModel: ViewModel
     @ObservedObject var composerViewModel: MessageComposerView.ViewModel
     @State private var messageRevision = 0
     @State private var expandedToolCallRoute: ToolCallExpansionRoute?
     var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -25,6 +33,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                             message: message,
                             composerViewModel: composerViewModel,
                             supplementaryContent: supplementaryContent,
+                            toolCallContent: toolCallContent,
                             stoppedSource: stoppedSources[message.uuid],
                             expandedToolCallRoute: $expandedToolCallRoute
                         )
@@ -34,18 +43,15 @@ struct MessageListView<MessageService: ChatMessageService>: View {
             }
             .onAppear {
                 scrollToBottom(scrollProxy: scrollProxy)
-                #if os(iOS)
-                NotificationCenter.default.addObserver(
-                    forName: UIResponder.keyboardDidShowNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    Task { @MainActor in
-                        scrollToBottom(scrollProxy: scrollProxy)
-                    }
-                }
-                #endif
             }
+            #if os(iOS)
+            // SwiftUI delivers this on the main actor, so the non-Sendable
+            // ScrollViewProxy never crosses an isolation boundary. Prefer this
+            // over a manually registered observer that must also be removed.
+            .onReceive(NotificationCenter.default.publisher(for: messageListKeyboardDidShow)) { _ in
+                scrollToBottom(scrollProxy: scrollProxy)
+            }
+            #endif
             .onReceive(
                 Publishers.MergeMany(viewModel.messageService.chatMessages.map { $0.objectWillChange })
                     .receive(on: DispatchQueue.main)
@@ -54,11 +60,7 @@ struct MessageListView<MessageService: ChatMessageService>: View {
                 // Recalculate which row owns the stopped notice in that case.
                 messageRevision &+= 1
             }
-            .onDisappear {
-                #if os(iOS)
-                NotificationCenter.default.removeObserver(self)
-                #endif
-            }.onChange(of: viewModel.messageService.chatMessages.last?.text) { (_,_) in
+            .onChange(of: viewModel.messageService.chatMessages.last?.text) { (_,_) in
                 scrollToBottom(scrollProxy: scrollProxy)
             }
         }
@@ -104,6 +106,7 @@ struct MessageListRow<Message: ChatMessageInfo>: View {
     @ObservedObject var message: Message
     @ObservedObject var composerViewModel: MessageComposerView.ViewModel
     var supplementaryContent: ((Message) -> AnyView?)?
+    var toolCallContent: ((ChatToolCall) -> AnyView?)? = nil
     var stoppedSource: Message? = nil
     var expandedToolCallRoute: Binding<ToolCallExpansionRoute?> = .constant(nil)
 
@@ -112,7 +115,8 @@ struct MessageListRow<Message: ChatMessageInfo>: View {
             CollapsibleMessageView(
                 message: message,
                 parentIsExpanded: .constant(false),
-                expandedToolCallRoute: expandedToolCallRoute
+                expandedToolCallRoute: expandedToolCallRoute,
+                toolCallContent: toolCallContent
             )
             if let failure = message.sendFailure {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
