@@ -71,19 +71,41 @@ struct RealtimeConversationSnapshotTests {
         try render(view, name: "composer-live-voice-button", height: 90)
     }
 
+    /// Renders through a real AppKit window rather than `ImageRenderer`,
+    /// which can't draw native controls (text fields, buttons) or scroll
+    /// views and leaves placeholders in their place.
     private func render<Content: View>(_ view: Content, name: String, width: CGFloat = 390, height: CGFloat = 640) throws {
-        let host = view
+        #if canImport(AppKit)
+        NSApplication.shared.finishLaunching()
+        let rootView = view
             .frame(width: width, height: height)
             .background(Color.white)
             .environment(\.colorScheme, .light)
-        let renderer = ImageRenderer(content: host)
-        renderer.scale = 2
-        #if canImport(AppKit)
-        guard let image = renderer.nsImage,
-              let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else {
-            Issue.record("Failed to render \(name)")
+        let host = NSHostingView(rootView: rootView)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        host.appearance = NSAppearance(named: .aqua)
+        let window = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderFront(nil)
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        // Let SwiftUI lay out and populate lazy content before capturing.
+        let deadline = Date().addingTimeInterval(0.5)
+        repeat {
+            host.layoutSubtreeIfNeeded()
+            _ = RunLoop.current.run(mode: .default, before: min(deadline, Date().addingTimeInterval(0.02)))
+        } while Date() < deadline
+
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+            Issue.record("Failed to create a bitmap for \(name)")
+            return
+        }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            Issue.record("Failed to encode \(name)")
             return
         }
         let url = URL(fileURLWithPath: "\(outputDir)/\(name).png")
