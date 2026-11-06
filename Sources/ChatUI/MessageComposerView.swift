@@ -33,12 +33,19 @@ public protocol VoiceInputHandler: AnyObject, ObservableObject {
 
 struct MessageComposerView: View {
     @ObservedObject var viewModel: ViewModel
+    /// Opens a live voice conversation; when nil no live-voice button shows.
+    private let onStartRealtime: (() -> Void)?
     @FocusState var promptTextFieldIsActive: Bool
     @Environment(\.colorScheme) var colorScheme
 
     // Local UI state (not duplicating handler state)
     @State private var localInput: String = "" // Local state for TextField to bypass binding issues
     @State private var textFieldId = UUID() // Used to force TextField recreation
+
+    init(viewModel: ViewModel, onStartRealtime: (() -> Void)? = nil) {
+        _viewModel = ObservedObject(wrappedValue: viewModel)
+        self.onStartRealtime = onStartRealtime
+    }
 
     var body: some View {
         let isRecording = viewModel.voiceInputHandler?.isRecording ?? false
@@ -65,6 +72,13 @@ struct MessageComposerView: View {
                 }
 
                 textInputField
+
+                if let onStartRealtime,
+                   viewModel.sendState == .idle,
+                   !isRecording, !isProcessing {
+                    realtimeButton(action: onStartRealtime)
+                        .transition(.opacity)
+                }
 
                 if viewModel.sendState == .streaming {
                     operationButton
@@ -228,6 +242,17 @@ struct MessageComposerView: View {
             viewModel.isMessageSending ||
             localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         )
+    }
+
+    private func realtimeButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "waveform.circle")
+                .font(.system(size: 24))
+                .foregroundColor(.accentColor)
+        }
+        .accessibilityIdentifier("chat.realtimeButton")
+        .accessibilityLabel("Start live voice conversation")
+        .buttonStyle(BorderlessButtonStyle())
     }
 
     private func microphoneButton(handler: any VoiceInputHandler) -> some View {
