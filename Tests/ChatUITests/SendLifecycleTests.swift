@@ -189,6 +189,35 @@ import Testing
             _ = try service.retryOperation(messageID: UUID(), stream: true)
         }
     }
+
+    @Test func composerAccessoryContextFollowsDraftFocusAndSend() async throws {
+        let service = LifecycleMessageService()
+        let viewModel = MessageComposerView.ViewModel(messageService: service)
+        #expect(ChatComposerContext(viewModel) == ChatComposerContext())
+
+        viewModel.input = "   \n"
+        viewModel.isInputFocused = true
+        var context = ChatComposerContext(viewModel)
+        #expect(context.isFocused)
+        #expect(!context.hasDraft, "Whitespace alone is not a draft")
+
+        viewModel.input = "hello"
+        #expect(ChatComposerContext(viewModel).hasDraft)
+
+        let send = Task { await viewModel.sendMessage() }
+        await Task.yield()
+        context = ChatComposerContext(viewModel)
+        #expect(context.isSending)
+        #expect(!context.hasDraft, "Sending clears the draft")
+
+        service.establishCurrent()
+        try await waitUntil { viewModel.sendState == .streaming }
+        #expect(ChatComposerContext(viewModel).isSending)
+
+        viewModel.stopSending()
+        await send.value
+        #expect(!ChatComposerContext(viewModel).isSending)
+    }
 }
 
 @MainActor

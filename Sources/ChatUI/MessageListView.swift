@@ -20,6 +20,8 @@ struct MessageListView<MessageService: ChatMessageService>: View {
     @State private var messageRevision = 0
     @State private var expandedToolCallRoute: ToolCallExpansionRoute?
     var supplementaryContent: ((MessageService.ChatMessage) -> AnyView?)?
+    /// Height of the view placed above the composer. The list shrinks when it grows.
+    var composerAccessoryHeight: CGFloat = 0
 
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -60,6 +62,12 @@ struct MessageListView<MessageService: ChatMessageService>: View {
             }
             .onChange(of: viewModel.messageService.chatMessages.last?.text) { (_,_) in
                 scrollToBottom(scrollProxy: scrollProxy)
+            }
+            .onChange(of: composerAccessoryHeight) { oldHeight, newHeight in
+                // A taller accessory shrinks the list; keep the latest row visible.
+                if ComposerAccessoryLayout.shouldScrollToBottom(accessoryHeightFrom: oldHeight, to: newHeight) {
+                    scrollToBottom(scrollProxy: scrollProxy)
+                }
             }
         }
     }
