@@ -186,6 +186,10 @@ struct MessageComposerView: View {
             .onChange(of: localInput) { _, newValue in
                 viewModel.input = newValue  // Sync local → viewModel
             }
+            .onChange(of: promptTextFieldIsActive) { _, isActive in
+                // Mirror focus so views above the composer can react to it.
+                viewModel.isInputFocused = isActive
+            }
     }
 
     var shouldShowLeadingMicrophone: Bool {
@@ -449,6 +453,8 @@ extension MessageComposerView {
         @Published var alertInfo: ChatAlertInfo?
         @Published var showError: Bool = false
         @Published private(set) var sendState: SendState = .idle
+        /// Whether the prompt field has keyboard focus. Mirrored from the view's `FocusState`.
+        @Published var isInputFocused: Bool = false
 
         var isMessageSending: Bool { sendState != .idle }
         var isComposerEditingDisabled: Bool { sendState == .establishing }
