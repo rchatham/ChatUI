@@ -28,7 +28,13 @@ struct MessageListView<MessageService: ChatMessageService>: View {
             ScrollView {
                 let messages = viewModel.messageService.chatMessages
                 let stoppedSources = Self.stoppedNoticeSources(in: messages, revision: messageRevision)
-                LazyVStack(alignment: .leading) {
+                // Not a LazyVStack. With a message taller than the screen near
+                // the end of the transcript, a lazy stack never settled after a
+                // send (iOS 26.3): each layout pass changed its cache of realized
+                // rows, which scheduled another pass, so SwiftUI laid out the
+                // window again and again inside one frame and the app froze.
+                // An eager stack has no such cache. Hosts page long histories.
+                VStack(alignment: .leading) {
                     ForEach(messages, id: \.uuid) { message in
                         MessageListRow(
                             message: message,
